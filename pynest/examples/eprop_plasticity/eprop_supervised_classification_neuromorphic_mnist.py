@@ -191,7 +191,6 @@ params_nrn_out = {
     "E_L": 0.0,
     "eprop_isi_trace_cutoff": 10**2,  # cutoff of integration of eprop trace between spikes
     "I_e": 0.0,
-    "regular_spike_arrival": False,
     "tau_m": 100.0,
     "V_m": 0.0,
 }
@@ -217,7 +216,6 @@ params_nrn_rec = {
 if model_nrn_rec == "eprop_iaf":
     del params_nrn_rec["V_reset"]
     params_nrn_rec["c_reg"] = 2.0 / duration["sequence"]  # firing rate regularization scaling
-    params_nrn_rec["regular_spike_arrival"] = True  # postsynaptic current scale factor
     params_nrn_rec["V_th"] = 0.6  # mV, spike threshold membrane voltage
 
 ####################

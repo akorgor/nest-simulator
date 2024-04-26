@@ -167,10 +167,6 @@ gamma                               :math:`\gamma`                       0.3 Hei
                                                                              gradient / pseudo-derivative of
                                                                              membrane voltage
 I_e                         pA      :math:`I_\text{e}`                   0.0 Constant external input current
-regular_spike_arrival       Boolean                                     True If True, the input spikes arrive at
-                                                                             the end of the time step, if
-                                                                             False at the beginning (determines
-                                                                             PSC scale)
 surrogate_gradient_function         :math:`\psi`            piecewise_linear Surrogate gradient /
                                                                              pseudo-derivative function
                                                                              ["piecewise_linear", "exponential",
@@ -333,9 +329,6 @@ private:
     //! Constant external input current (pA).
     double I_e_;
 
-    //! If True, the input spikes arrive at the beginning of the time step, if False at the end (determines PSC scale).
-    bool regular_spike_arrival_;
-
     //! Surrogate gradient / pseudo-derivative function of the membrane voltage ["piecewise_linear", "exponential",
     //! "fast_sigmoid_derivative", "arctan"]
     std::string surrogate_gradient_function_;
@@ -427,9 +420,6 @@ private:
   {
     //! Propagator matrix entry for evolving the membrane voltage.
     double P_v_m_;
-
-    //! Propagator matrix entry for evolving the incoming spike variables.
-    double P_z_in_;
 
     //! Propagator matrix entry for evolving the incoming currents.
     double P_i_in_;
