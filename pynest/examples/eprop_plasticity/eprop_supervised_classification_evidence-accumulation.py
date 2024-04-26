@@ -209,7 +209,7 @@ params_nrn_reg = {
     "tau_m": 20.0,
     "V_m": 0.0,
     "V_th": 0.6,  # mV, spike threshold membrane voltage
-    "kappa": 0.97,  # low-pass filter of the eligibility trace
+    "kappa": 0.95,  # low-pass filter of the eligibility trace
 }
 
 if model_nrn_reg == "eprop_iaf_psc_delta":
@@ -233,7 +233,7 @@ params_nrn_ad = {
     "tau_m": 20.0,
     "V_m": 0.0,
     "V_th": 0.6,
-    "kappa": 0.97,
+    "kappa": 0.95,
 }
 
 params_nrn_ad["adapt_beta"] = 1.7 * (
