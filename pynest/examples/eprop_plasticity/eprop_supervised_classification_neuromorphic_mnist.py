@@ -191,14 +191,14 @@ params_nrn_out = {
     "E_L": 0.0,
     "eprop_isi_trace_cutoff": 10**2,  # cutoff of integration of eprop trace between spikes
     "I_e": 0.0,
-    "tau_m": 100.0,
+    "tau_m": 20.0,
     "V_m": 0.0,
 }
 
 params_nrn_rec = {
     "beta": 1.0,  # width scaling of the pseudo-derivative
     "C_m": 1.0,  # pF, membrane capacitance - takes effect only if neurons get current input (here not the case)
-    "c_reg": 2.0 / duration["sequence"],  # firing rate regularization scaling
+    "c_reg": 2.0 / duration["sequence"] * duration["learning_window"],  # firing rate regularization scaling
     "E_L": 0.0,  # mV, leak reversal potential
     "eprop_isi_trace_cutoff": 10**2,  # cutoff of integration of eprop trace between spikes
     "f_target": 10.0,  # spikes/s, target firing rate for firing rate regularization
@@ -206,16 +206,16 @@ params_nrn_rec = {
     "I_e": 0.0,  # pA, external current input
     "surrogate_gradient_function": "piecewise_linear",  # surrogate gradient / pseudo-derivative function
     "t_ref": 0.0,  # ms, duration of refractory period
-    "tau_m": 30.0,  # ms, membrane time constant
+    "tau_m": 20.0,  # ms, membrane time constant
     "V_m": 0.0,  # mV, initial value of the membrane voltage
     "V_th": 0.5,  # mV, spike threshold membrane voltage
     "V_reset": -0.5,  # mV, reset membrane voltage
-    "kappa": 0.99,  # low-pass filter of the eligibility trace
+    "kappa": 0.95,  # low-pass filter of the eligibility trace
 }
 
 if model_nrn_rec == "eprop_iaf":
     del params_nrn_rec["V_reset"]
-    params_nrn_rec["c_reg"] = 2.0 / duration["sequence"]  # firing rate regularization scaling
+    params_nrn_rec["c_reg"] = 300.0 / duration["sequence"] * duration["learning_window"]
     params_nrn_rec["V_th"] = 0.6  # mV, spike threshold membrane voltage
 
 ####################
