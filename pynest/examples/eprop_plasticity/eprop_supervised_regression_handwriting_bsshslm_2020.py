@@ -20,8 +20,8 @@
 # along with NEST.  If not, see <http://www.gnu.org/licenses/>.
 
 r"""
-Tutorial on learning to generate handwritten text with e-prop
--------------------------------------------------------------
+Tutorial on learning to generate handwritten text with e-prop (_bsshslm_2020)
+-----------------------------------------------------------------------------
 
 Training a regression model using supervised e-prop plasticity to generate handwritten text
 
@@ -65,7 +65,7 @@ References
 
 .. [2] https://github.com/IGITUGraz/eligibility_propagation/blob/master/Figure_3_and_S7_e_prop_tutorials/tutorial_pattern_generation.py
 
-.. [3] Korcsak-Gorzo A, Stapmanns J, Espinoza Valverde JA, Dahmen D, van Albada SJ, Bolten M, Diesmann M.
+.. [3] Korcsak-Gorzo A, Stapmanns J, Espinoza Valverde JA, Dahmen D, van Albada SJ, Plesser HE, Bolten M, Diesmann M.
        Event-based implementation of eligibility propagation (in preparation)
 """  # pylint: disable=line-too-long # noqa: E501
 
@@ -89,7 +89,7 @@ from IPython.display import Image
 # synapse models below. The connections that must be established are numbered 1 to 6.
 
 try:
-    Image(filename="./eprop_supervised_regression_schematic_handwriting.png")
+    Image(filename="./eprop_supervised_regression_schematic_handwriting_bsshslm_2020.png")
 except Exception:
     pass
 
@@ -111,7 +111,7 @@ np.random.seed(rng_seed)  # fix numpy random seed
 # .....................
 # The task's temporal structure is then defined, once as time steps and once as durations in milliseconds.
 
-n_batch = 1  # batch size
+batch_size = 1  # batch size
 n_iter = 5  # number of iterations, 5000 for good convergence
 
 data_file_name = "chaos_handwriting.txt"  # name of file with task data
@@ -123,7 +123,7 @@ steps = {
 
 steps["sequence"] = len(data) * steps["data_point"]  # time steps of one full sequence
 steps["learning_window"] = steps["sequence"]  # time steps of window with non-zero learning signals
-steps["task"] = n_iter * n_batch * steps["sequence"]  # time steps of task
+steps["task"] = n_iter * batch_size * steps["sequence"]  # time steps of task
 
 steps.update(
     {
@@ -269,7 +269,7 @@ params_wr = {
 }
 
 params_sr = {
-    "start": duration["total_offset"],
+    "start": duration["offset_gen"],
     "stop": duration["total_offset"] + duration["task"],
 }
 
@@ -302,7 +302,7 @@ weights_out_rec = np.array(np.random.randn(n_rec, n_out) / np.sqrt(n_rec), dtype
 params_common_syn_eprop = {
     "optimizer": {
         "type": "adam",  # algorithm to optimize the weights
-        "batch_size": n_batch,
+        "batch_size": batch_size,
         "beta_1": 0.9,  # exponential decay rate for 1st moment estimate of Adam optimizer
         "beta_2": 0.999,  # exponential decay rate for 2nd moment raw estimate of Adam optimizer
         "epsilon": 1e-8,  # small numerical stabilization constant of Adam optimizer
@@ -420,7 +420,7 @@ for target_signal in target_signal_list:
     params_gen_rate_target.append(
         {
             "amplitude_times": np.arange(0.0, duration["task"], duration["step"]) + duration["total_offset"],
-            "amplitude_values": np.tile(target_signal, n_iter * n_batch),
+            "amplitude_values": np.tile(target_signal, n_iter * batch_size),
         }
     )
 
@@ -509,7 +509,13 @@ for sender in set(senders):
     error = (readout_signal[idc] - target_signal[idc]) ** 2
     loss_list.append(0.5 * np.add.reduceat(error, np.arange(0, steps["task"], steps["sequence"])))
 
-loss = np.sum(loss_list, axis=0)
+readout_signal = np.array([readout_signal[senders == i] for i in set(senders)])
+target_signal = np.array([target_signal[senders == i] for i in set(senders)])
+
+readout_signal = readout_signal.reshape((n_out, n_iter, batch_size, steps["sequence"]))
+target_signal = target_signal.reshape((n_out, n_iter, batch_size, steps["sequence"]))
+
+loss = 0.5 * np.mean(np.sum((readout_signal - target_signal) ** 2, axis=3), axis=(0, 2))
 
 # %% ###########################################################################################################
 # Plot results

@@ -29,11 +29,11 @@ Description
 ~~~~~~~~~~~
 
 This script demonstrates supervised learning of a classification task with the eligibility propagation (e-prop)
-plasticity mechanism by Bellec et al. [1]_.
+plasticity mechanism by Bellec et al. [1]_ with additional biological features described in [3]_.
 
-The primary objective of this task is to classify the Neuromorphic MNIST dataset [2]_, an adaptation of the
+The primary objective of this task is to classify the N-MNIST dataset [2]_, an adaptation of the
 traditional MNIST dataset of handwritten digits specifically designed for neuromorphic computing.
-The Neuromorphic MNIST dataset captures changes in pixel intensity through a dynamic vision sensor,
+The N-MNIST dataset captures changes in pixel intensity through a dynamic vision sensor,
 converting static images into sequences of binary events, which we interpret as spike trains.
 This conversion closely emulates biological neural processing, making it a fitting challenge for
 an e-prop-equipped spiking neural network (SNN).
@@ -65,7 +65,7 @@ References
 .. [2] Orchard, G., Jayawant, A., Cohen, G. K., & Thakor, N. (2015). Converting static image datasets to
        spiking neuromorphic datasets using saccades. Frontiers in neuroscience, 9, 159859.
 
-.. [3] Korcsak-Gorzo A, Stapmanns J, Espinoza Valverde JA, Dahmen D, van Albada SJ, Bolten M, Diesmann M.
+.. [3] Korcsak-Gorzo A, Stapmanns J, Espinoza Valverde JA, Dahmen D, van Albada SJ, Plesser HE, Bolten M, Diesmann M.
        Event-based implementation of eligibility propagation (in preparation)
 """  # pylint: disable=line-too-long # noqa: E501
 
@@ -75,7 +75,6 @@ References
 # We begin by importing all libraries required for the simulation, analysis, and visualization.
 
 import os
-import sys
 import zipfile
 
 import matplotlib as mpl
@@ -84,7 +83,7 @@ import nest
 import numpy as np
 import requests
 from cycler import cycler
-from IPython.display import HTML, Image
+from IPython.display import Image
 
 # %% ###########################################################################################################
 # Schematic of network architecture
@@ -94,7 +93,7 @@ from IPython.display import HTML, Image
 # synapse models below. The connections that must be established are numbered 1 to 7.
 
 try:
-    Image(filename="./eprop_supervised_classification_schematic_evidence-accumulation.png")
+    Image(filename="./eprop_supervised_classification_schematic_neuromorphic_mnist.png")
 except Exception:
     pass
 
@@ -115,33 +114,34 @@ np.random.seed(rng_seed)  # fix numpy random seed
 # Define timing of task
 # .....................
 # The task's temporal structure is then defined, once as time steps and once as durations in milliseconds.
-# The variable `evaluation_group_size` is utilized post-training to aggregate and analyze the performance
-# metrics of the neural network. Unlike the online learning phase, where the model updates its weights based on
-# individual data points presented one at a time, the `evaluation_group_size` specifies the number of instances
-# over which the network's output is collectively assessed to compute the mean accuracy and error.
+# Even though each sample is processed independently during training, we aggregate predictions and true
+# labels across a group of samples during the evaluation phase. The number of samples in this group is
+# determined by the `group_size` parameter. This data is then used to assess the neural network's
+# performance metrics, such as average accuracy and mean error.
 
-evaluation_group_size = 4  # number of instances used to calculate the mean accuracy and error
-n_iter = 4
+group_size = 4  # number of instances over which to evaluate the learning performance, 100 for convergence
+n_iter = 4  # number of iterations, 200 for convergence
+test_every = 10  # cyclical number of training iterations after which to test the performance
 
 steps = {}
 
 steps["sequence"] = 300  # time steps of one full sequence
 steps["learning_window"] = 10  # time steps of window with non-zero learning signals
-steps["task"] = n_iter * evaluation_group_size * steps["sequence"]  # time steps of task
+steps["evaluation_group"] = group_size * steps["sequence"]
+steps["task"] = n_iter * group_size * steps["sequence"]  # time steps of task
 
 steps.update(
     {
         "offset_gen": 1,  # offset since generator signals start from time step 1
         "delay_in_rec": 1,  # connection delay between input and recurrent neurons
-        "extension_sim": 3,  # extra time step to close right-open simulation time interval in Simulate()
+        "extension_sim": 1,  # extra time step to close right-open simulation time interval in Simulate()
     }
 )
 
 steps["delays"] = steps["delay_in_rec"]  # time steps of delays
 
 steps["total_offset"] = steps["offset_gen"] + steps["delays"]  # time steps of total offset
-
-steps["sim"] = steps["task"] + steps["total_offset"] + steps["extension_sim"]  # time steps of sim
+steps["pre_sim"] = steps["total_offset"] + steps["extension_sim"]
 
 duration = {"step": 1.0}  # ms, temporal resolution of the simulation
 
@@ -151,11 +151,9 @@ duration.update({key: value * duration["step"] for key, value in steps.items()})
 # Set up simulation
 # .................
 # As last step of the setup, we reset the NEST kernel to remove all existing NEST simulation settings and
-# objects and set some NEST kernel parameters, some of which are e-prop-related.
+# objects and set some NEST kernel parameters.
 
 params_setup = {
-    "eprop_reset_neurons_on_update": True,  # if True, reset dynamic variables at start of each update interval
-    "eprop_update_interval": duration["sequence"],  # ms, time interval for updating the synaptic weights
     "print_time": False,  # if True, print time progress bar during simulation, set False if run as code cell
     "resolution": duration["step"],
     "total_num_virtual_procs": 4,  # number of virtual processes, set in case of distributed computing
@@ -182,41 +180,34 @@ pixels_blocklist = np.loadtxt("./NMNIST_pixels_blocklist.txt")
 
 n_in = 2 * 34 * 34 - len(pixels_blocklist)  # number of input neurons
 n_rec = 100  # number of recurrent neurons
-n_out = 10
-
-model_nrn_rec = "eprop_iaf"
+n_out = 10  # number of readout neurons
 
 params_nrn_out = {
-    "C_m": 1.0,
-    "E_L": 0.0,
-    "eprop_isi_trace_cutoff": 10**2,  # cutoff of integration of eprop trace between spikes
-    "I_e": 0.0,
-    "tau_m": 2.0,
-    "V_m": 0.0,
+    "C_m": 1.0,  # pF, membrane capacitance - takes effect only if neurons get current input (here not the case)
+    "E_L": 0.0,  # mV, leak / resting membrane potential
+    "eprop_isi_trace_cutoff": 100,  # cutoff of integration of eprop trace between spikes
+    "I_e": 0.0,  # pA, external current input
+    "tau_m": 2.0,  # ms, membrane time constant
+    "V_m": 0.0,  # mV, initial value of the membrane voltage
 }
 
 params_nrn_rec = {
     "beta": 1.0,  # width scaling of the pseudo-derivative
-    "C_m": 1.0,  # pF, membrane capacitance - takes effect only if neurons get current input (here not the case)
-    "c_reg": 2.0 / duration["sequence"],  # firing rate regularization scaling
-    "E_L": 0.0,  # mV, leak reversal potential
-    "eprop_isi_trace_cutoff": 10**2,  # cutoff of integration of eprop trace between spikes
+    "C_m": 1.0,
+    "c_reg": 2.0 / duration["sequence"] * duration["learning_window"],  # firing rate regularization scaling
+    "E_L": 0.0,
+    "eprop_isi_trace_cutoff": 100,
     "f_target": 10.0,  # spikes/s, target firing rate for firing rate regularization
     "gamma": 0.3,  # height scaling of the pseudo-derivative
-    "I_e": 0.0,  # pA, external current input
+    "I_e": 0.0,
+    "regular_spike_arrival": True,
     "surrogate_gradient_function": "piecewise_linear",  # surrogate gradient / pseudo-derivative function
     "t_ref": 0.0,  # ms, duration of refractory period
-    "tau_m": 20.0,  # ms, membrane time constant
-    "V_m": 0.0,  # mV, initial value of the membrane voltage
-    "V_th": 0.5,  # mV, spike threshold membrane voltage
-    "V_reset": -0.5,  # mV, reset membrane voltage
+    "tau_m": 20.0,
+    "V_m": 0.0,
+    "V_th": 0.6,  # mV, spike threshold membrane voltage
     "kappa": 0.71,  # low-pass filter of the eligibility trace
 }
-
-if model_nrn_rec == "eprop_iaf":
-    del params_nrn_rec["V_reset"]
-    params_nrn_rec["c_reg"] = 2.0 / duration["sequence"] * duration["learning_window"]
-    params_nrn_rec["V_th"] = 0.6  # mV, spike threshold membrane voltage
 
 ####################
 
@@ -226,11 +217,10 @@ if model_nrn_rec == "eprop_iaf":
 gen_spk_in = nest.Create("spike_generator", n_in)
 nrns_in = nest.Create("parrot_neuron", n_in)
 
-nrns_rec = nest.Create(model_nrn_rec, n_rec, params_nrn_rec)
+nrns_rec = nest.Create("eprop_iaf", n_rec, params_nrn_rec)
 nrns_out = nest.Create("eprop_readout", n_out, params_nrn_out)
 gen_rate_target = nest.Create("step_rate_generator", n_out)
 gen_learning_window = nest.Create("step_rate_generator")
-
 
 # %% ###########################################################################################################
 # Create recorders
@@ -241,12 +231,15 @@ gen_learning_window = nest.Create("step_rate_generator")
 # experiment, and the recording interval can be increased (see the documentation on the specific recorders). By
 # default, recordings are stored in memory but can also be written to file.
 
-n_record = 1  # number of adaptive and regular neurons each to record recordables from
-n_record_w = 3  # number of senders and targets to record weights from
+n_record = 1  # number of neurons to record dynamic variables from - this script requires n_record >= 1
+n_record_w = 3  # number of senders and targets to record weights from - this script requires n_record_w >=1
+
+if n_record == 0 or n_record_w == 0:
+    raise ValueError("n_record and n_record_w >= 1 required")
 
 params_mm_rec = {
     "interval": duration["step"],  # interval between two recorded time points
-    "record_from": ["V_m", "surrogate_gradient", "learning_signal"],  # recordables
+    "record_from": ["V_m", "surrogate_gradient", "learning_signal"],  # dynamic variables to record
     "start": duration["offset_gen"] + duration["delay_in_rec"],  # start time of recording
     "stop": duration["offset_gen"] + duration["delay_in_rec"] + duration["task"],  # stop time of recording
 }
@@ -254,20 +247,27 @@ params_mm_rec = {
 params_mm_out = {
     "interval": duration["step"],
     "record_from": ["V_m", "readout_signal", "target_signal", "error_signal"],
-    "start": duration["total_offset"] - 1,
-    "stop": duration["total_offset"] + duration["task"] - 1,
+    "start": duration["total_offset"],
+    "stop": duration["total_offset"] + duration["task"],
 }
 
 params_wr = {
     "senders": nrns_in[:n_record_w] + nrns_rec[:n_record_w],  # limit senders to subsample weights to record
     "targets": nrns_rec[:n_record_w] + nrns_out,  # limit targets to subsample weights to record from
+    "start": duration["total_offset"],
+    "stop": duration["total_offset"] + duration["task"],
+}
+
+params_sr = {
+    "start": duration["offset_gen"],
+    "stop": duration["total_offset"] + duration["task"],
 }
 
 ####################
 
 mm_rec = nest.Create("multimeter", params_mm_rec)
 mm_out = nest.Create("multimeter", params_mm_out)
-sr = nest.Create("spike_recorder")
+sr = nest.Create("spike_recorder", params_sr)
 wr = nest.Create("weight_recorder", params_wr)
 
 nrns_rec_record = nrns_rec[:n_record]
@@ -275,7 +275,7 @@ nrns_rec_record = nrns_rec[:n_record]
 # %% ###########################################################################################################
 # Create connections
 # ~~~~~~~~~~~~~~~~~~
-# Now, we define the connectivities and set up the synaptic parameters, with the synaptic weights drawn from
+# Now, we define the connectivity and set up the synaptic parameters, with the synaptic weights drawn from
 # normal distributions. After these preparations, we establish the enumerated connections of the core network,
 # as well as additional connections to the recorders.
 # For this task, we implement a method characterized by sparse connectivity designed to enhance resource efficiency
@@ -297,6 +297,10 @@ def calculate_glorot_dist(fan_in, fan_out):
     return glorot_distribution
 
 
+def create_mask(weights, sparsity_level):
+    return np.random.choice([0, 1], weights.shape, p=[sparsity_level, 1 - sparsity_level])
+
+
 dtype_weights = np.float32  # data type of weights - for reproducing TF results set to np.float32
 weights_in_rec = np.array(np.random.randn(n_in, n_rec).T / np.sqrt(n_in), dtype=dtype_weights)
 weights_rec_rec = np.array(np.random.randn(n_rec, n_rec).T / np.sqrt(n_rec), dtype=dtype_weights)
@@ -304,17 +308,9 @@ np.fill_diagonal(weights_rec_rec, 0.0)  # since no autapses set corresponding we
 weights_rec_out = np.array(calculate_glorot_dist(n_rec, n_out).T, dtype=dtype_weights)
 weights_out_rec = np.array(np.random.randn(n_rec, n_out), dtype=dtype_weights)
 
-
-sparsity_level_in = 0.9
-mask_in = np.random.choice([0, 1], weights_in_rec.shape, p=[sparsity_level_in, 1 - sparsity_level_in])
-sparsity_level_rec = 0.98
-mask_rec = np.random.choice([0, 1], weights_rec_rec.shape, p=[sparsity_level_rec, 1 - sparsity_level_rec])
-sparsity_level_out = 0.0
-mask_out = np.random.choice([0, 1], weights_rec_out.shape, p=[sparsity_level_out, 1 - sparsity_level_out])
-
-weights_in_rec *= mask_in
-weights_rec_rec *= mask_rec
-weights_rec_out *= mask_out
+weights_in_rec *= create_mask(weights_in_rec, 0.9)
+weights_rec_rec *= create_mask(weights_rec_rec, 0.98)
+weights_rec_out *= create_mask(weights_rec_out, 0.0)
 
 params_common_syn_eprop = {
     "optimizer": {
@@ -324,7 +320,11 @@ params_common_syn_eprop = {
         "Wmin": -100.0,  # pA, minimal limit of the synaptic weights
         "Wmax": 100.0,  # pA, maximal limit of the synaptic weights
     },
+    "weight_recorder": wr,
 }
+
+eta_train = 5e-3
+eta_test = 0.0
 
 params_syn_base = {
     "synapse_model": "eprop_synapse",
@@ -334,7 +334,6 @@ params_syn_base = {
 params_syn_in = params_syn_base.copy()
 params_syn_rec = params_syn_base.copy()
 params_syn_out = params_syn_base.copy()
-
 
 params_syn_feedback = {
     "synapse_model": "eprop_learning_signal_connection",
@@ -372,38 +371,28 @@ nest.SetDefaults("eprop_synapse", params_common_syn_eprop)
 
 nest.Connect(gen_spk_in, nrns_in, params_conn_one_to_one, params_syn_static)  # connection 1
 
-# Sparse connectivity from input to recurrent neurons
-for j in range(n_rec):
-    for i in range(n_in):
-        w = weights_in_rec[j, i]
-        if np.abs(w) > 0:
-            params_syn_in["weight"] = w
-            nest.Connect(nrns_in[i], nrns_rec[j], params_conn_one_to_one, params_syn_in)
 
-# Sparse connectivity from recurrent to recurrent neurons
-for j in range(n_rec):
-    for i in range(n_rec):
-        w = weights_rec_rec[j, i]
-        if np.abs(w) > 0:
-            params_syn_rec["weight"] = w
-            nest.Connect(nrns_rec[i], nrns_rec[j], params_conn_one_to_one, params_syn_rec)
+def sparsely_connect(weights, params_syn, nrns_pre, nrns_post):
+    for j in range(weights.shape[0]):
+        for i in range(weights.shape[1]):
+            w = weights[j, i]
+            if np.abs(w) > 0.0:
+                params_syn["weight"] = w
+                nest.Connect(nrns_pre[i], nrns_post[j], params_conn_one_to_one, params_syn)
 
-# Sparse connectivity from recurrent to output neurons
-for j in range(n_out):
-    for i in range(n_rec):
-        w = weights_rec_out[j, i]
-        if np.abs(w) > 0:
-            params_syn_out["weight"] = w
-            nest.Connect(nrns_rec[i], nrns_out[j], params_conn_one_to_one, params_syn_out)
+
+sparsely_connect(weights_in_rec, params_syn_in, nrns_in, nrns_rec)  # connection 2
+sparsely_connect(weights_rec_rec, params_syn_rec, nrns_rec, nrns_rec)  # connection 3
+sparsely_connect(weights_rec_out, params_syn_out, nrns_rec, nrns_out)  # connection 4
 
 nest.Connect(nrns_out, nrns_rec, params_conn_all_to_all, params_syn_feedback)  # connection 5
 nest.Connect(gen_rate_target, nrns_out, params_conn_one_to_one, params_syn_rate_target)  # connection 6
-nest.Connect(gen_learning_window, nrns_out, params_conn_all_to_all, params_syn_learning_window)  # connection
-nest.Connect(mm_out, nrns_out, params_conn_all_to_all, params_syn_static)
+nest.Connect(gen_learning_window, nrns_out, params_conn_all_to_all, params_syn_learning_window)  # connection 7
 
 nest.Connect(nrns_in + nrns_rec, sr, params_conn_all_to_all, params_syn_static)
 
 nest.Connect(mm_rec, nrns_rec_record, params_conn_all_to_all, params_syn_static)
+nest.Connect(mm_out, nrns_out, params_conn_all_to_all, params_syn_static)
 
 # After creating the connections, we can individually initialize the optimizer's
 # dynamic variables for single synapses (here exemplarily for two connections).
@@ -413,13 +402,13 @@ nest.GetConnections(nrns_rec[0], nrns_rec[1:3]).set([params_init_optimizer] * 2)
 # %% ###########################################################################################################
 # Create input and output
 # ~~~~~~~~~~~~~~~~~~~~~~~
-# This section involves downloading the Neuromorphic-MNIST (N-MNIST) dataset, extracting it, and preparing it for
+# This section involves downloading the N-MNIST dataset, extracting it, and preparing it for
 # neural network training and testing. The dataset consists of two main components: training and test sets.
 
-# The `download_and_extract_dataset` function handles the retrieval of the dataset from a given URL and its
-# subsequent extraction into a specified directory. It checks for the presence of the dataset to avoid
-# re-downloading. After downloading, it extracts the main dataset zip file, followed by further extraction of
-# nested zip files for training and test data, ensuring that the dataset is ready for loading and processing.
+# The `download_and_extract_nmnist_dataset` function retrieves the dataset from its public repository and extracts
+# it into a specified directory. It checks for the presence of the dataset to avoid re-downloading. After downloading,
+# it extracts the main dataset zip file, followed by further extraction of nested zip files for training and test data,
+# ensuring that the dataset is ready for loading and processing.
 
 # The `load_image` function reads a single image file from the dataset, converting the event-based neuromorphic
 # data into a format suitable for processing by spiking neural networks. It filters events based on specified pixel
@@ -431,42 +420,41 @@ nest.GetConnections(nrns_rec[0], nrns_rec[1:3]).set([params_init_optimizer] * 2)
 # representative samples are used throughout the training process.
 
 
-def download_and_extract_dataset(url, dataset_directory="468j46mzdv-1"):
-    path = os.path.join(".", dataset_directory)
+def unzip(zip_file_path, extraction_path):
+    print(f"Extracting {zip_file_path}.")
+    with zipfile.ZipFile(zip_file_path, "r") as zip_file:
+        zip_file.extractall(extraction_path)
+    os.remove(zip_file_path)
 
-    expected_contents = ["Test", "Train"]
-    if os.path.exists(path) and all(os.path.exists(os.path.join(path, content)) for content in expected_contents):
+
+def download_and_extract_nmnist_dataset(save_path="./"):
+    nmnist_dataset = {
+        "url": "https://prod-dcd-datasets-cache-zipfiles.s3.eu-west-1.amazonaws.com/468j46mzdv-1.zip",
+        "directory": "468j46mzdv-1",
+        "zip": "dataset.zip",
+    }
+
+    path = os.path.join(save_path, nmnist_dataset["directory"])
+
+    train_path = os.path.join(path, "Train")
+    test_path = os.path.join(path, "Test")
+
+    downloaded_zip_path = os.path.join(save_path, nmnist_dataset["zip"])
+
+    if os.path.exists(path) and os.path.exists(train_path) and os.path.exists(test_path):
         print(f"\nThe directory '{path}' already exists with expected contents. Skipping download and extraction.")
-        return path
-
-    local_zip_filename = "dataset.zip"
-
-    if not os.path.exists(local_zip_filename):
-        print("\nDownloading Neuromorphic-MNIST (N-MNIST) dataset...")
-        response = requests.get(url, timeout=10)
-        with open(local_zip_filename, "wb") as file:
-            file.write(response.content)
-        print("Download completed.")
     else:
-        print(f"Found {local_zip_filename}, skipping download.")
+        if not os.path.exists(downloaded_zip_path):
+            print("\nDownloading the N-MNIST dataset.")
+            response = requests.get(nmnist_dataset["url"], timeout=10)
+            with open(downloaded_zip_path, "wb") as file:
+                file.write(response.content)
 
-    print("Extracting dataset...")
-    with zipfile.ZipFile(local_zip_filename, "r") as zip_ref:
-        zip_ref.extractall(".")
-    print("Extraction completed.")
+        unzip(downloaded_zip_path, save_path)
+        unzip(f"{train_path}.zip", path)
+        unzip(f"{test_path}.zip", path)
 
-    for sub_zip in ["Train.zip", "Test.zip"]:
-        sub_zip_path = os.path.join(path, sub_zip)
-        print(f"Extracting {sub_zip}...")
-        with zipfile.ZipFile(sub_zip_path, "r") as zip_ref:
-            zip_ref.extractall(path)
-        print(f"Extraction of {sub_zip} completed.")
-        os.remove(sub_zip_path)
-
-    os.remove(local_zip_filename)
-    print(f"Removed the zip file {local_zip_filename}.")
-
-    return path
+    return train_path, test_path
 
 
 def load_image(file_path, pixels_blocklist=None):
@@ -488,22 +476,23 @@ def load_image(file_path, pixels_blocklist=None):
         image_full[pixel].append(time)
 
     for pixel, times in enumerate(image_full):
-        if pixel not in pixels_blocklist:
+        if pixels_blocklist is None or pixel not in pixels_blocklist:
             image.append(times)
 
     return image
 
 
 class DataLoader:
-    def __init__(self, path, selected_labels, evaluation_group_size, pixels_blocklist=None):
+    def __init__(self, path, selected_labels, group_size, pixels_blocklist=None):
         self.path = path
         self.selected_labels = selected_labels
-        self.evaluation_group_size = evaluation_group_size
+        self.group_size = group_size
         self.pixels_blocklist = pixels_blocklist
 
         self.current_index = 0
         self.all_sample_paths, self.all_labels = self.get_all_sample_paths_with_labels()
-        self.shuffled_indices = np.random.permutation(len(self.all_sample_paths))
+        self.n_all_samples = len(self.all_sample_paths)
+        self.shuffled_indices = np.random.permutation(self.n_all_samples)
 
     def get_all_sample_paths_with_labels(self):
         all_sample_paths = []
@@ -520,20 +509,11 @@ class DataLoader:
         return all_sample_paths, all_labels
 
     def get_new_evaluation_group(self):
-        end_index = self.current_index + self.evaluation_group_size
+        end_index = self.current_index + self.group_size
 
-        if end_index <= len(self.all_sample_paths):
-            selected_indices = self.shuffled_indices[self.current_index : end_index]
-        else:
-            overflow = end_index - len(self.all_sample_paths)
-            selected_indices = np.concatenate(
-                (
-                    self.shuffled_indices[self.current_index : len(self.all_sample_paths)],
-                    self.shuffled_indices[:overflow],
-                )
-            )
+        selected_indices = np.take(self.shuffled_indices, range(self.current_index, end_index), mode="wrap")
 
-        self.current_index = (self.current_index + self.evaluation_group_size) % len(self.all_sample_paths)
+        self.current_index = (self.current_index + self.group_size) % self.n_all_samples
 
         images_group = [load_image(self.all_sample_paths[i], self.pixels_blocklist) for i in selected_indices]
         labels_group = [self.all_labels[i] for i in selected_indices]
@@ -541,16 +521,56 @@ class DataLoader:
         return images_group, labels_group
 
 
-dataset_url = "https://prod-dcd-datasets-cache-zipfiles.s3.eu-west-1.amazonaws.com/468j46mzdv-1.zip"
-path = download_and_extract_dataset(dataset_url)
+def create_input_output(loader, target_signal_value=1.0):
+    img_group, targets_group = loader.get_new_evaluation_group()
 
-train_path = os.path.join(path, "Train/")
-test_path = os.path.join(path, "Test/")
+    spike_times = [[] for _ in range(n_in)]
+    target_rates = np.zeros((n_out, steps["evaluation_group"]))
+
+    for group_elem in range(group_size):
+        t_start_group_elem = group_elem * steps["sequence"]
+        t_end_group_elem = t_start_group_elem + steps["sequence"]
+        t_start_absolute = t_start_iteration + t_start_group_elem
+
+        target_rates[targets_group[group_elem], t_start_group_elem:t_end_group_elem] = target_signal_value
+
+        for n, relative_times in enumerate(img_group[group_elem]):
+            if len(relative_times) > 0:
+                spike_times[n].extend(t_start_absolute + np.array(relative_times))
+
+    params_gen_spk_in = [{"spike_times": spk_times} for spk_times in spike_times]
+
+    amplitude_times = duration["total_offset"] + np.arange(t_start_iteration, t_end_iteration)
+
+    params_gen_rate_target = [
+        {"amplitude_times": amplitude_times, "amplitude_values": target_rate} for target_rate in target_rates
+    ]
+    return params_gen_spk_in, params_gen_rate_target
+
+
+save_path = "./"  # path to save the N-MNIST dataset to
+train_path, test_path = download_and_extract_nmnist_dataset(save_path)
 
 selected_labels = [label for label in range(n_out)]
 
-train_loader = DataLoader(train_path, selected_labels, evaluation_group_size, pixels_blocklist)
-test_loader = DataLoader(test_path, selected_labels, evaluation_group_size, pixels_blocklist)
+data_loader_train = DataLoader(train_path, selected_labels, group_size, pixels_blocklist)
+data_loader_test = DataLoader(test_path, selected_labels, group_size, pixels_blocklist)
+
+amplitude_times = np.hstack(
+    [
+        np.array([0.0, duration["sequence"] - duration["learning_window"]])
+        + duration["total_offset"]
+        + i * duration["sequence"]
+        for i in range(group_size * n_iter)
+    ]
+)
+
+amplitude_values = np.array([0.0, 1.0] * group_size * n_iter)
+
+params_gen_learning_window = {
+    "amplitude_times": amplitude_times,
+    "amplitude_values": amplitude_values,
+}
 
 # %% ###########################################################################################################
 # Force final update
@@ -594,104 +614,58 @@ weights_pre_train = {
 # We train the network by simulating for a set simulation time, determined by the number of iterations and the
 # evaluation group size and the length of one sequence.
 
-nest.Simulate(duration["total_offset"])
 
-amplitude_times = np.hstack(
-    [
-        np.array([0.0, duration["sequence"] - duration["learning_window"]])
-        + duration["total_offset"]
-        + i * duration["sequence"]
-        for i in range(evaluation_group_size * (n_iter))
-    ]
-)
+def evaluate(n_iteration, iter_start):
+    events_mm_out = mm_out.get("events")
 
-amplitude_values = np.array([0.0, 1.0] * evaluation_group_size * (n_iter))
+    readout_signal = events_mm_out["readout_signal"]
+    target_signal = events_mm_out["target_signal"]
+    senders = events_mm_out["senders"]
 
-params_gen_learning_window = {
-    "amplitude_times": amplitude_times,
-    "amplitude_values": amplitude_values,
-}
+    readout_signal = np.array([readout_signal[senders == i] for i in set(senders)])
+    target_signal = np.array([target_signal[senders == i] for i in set(senders)])
+
+    readout_signal = readout_signal.reshape((n_out, n_iteration, group_size, steps["sequence"]))
+    target_signal = target_signal.reshape((n_out, n_iteration, group_size, steps["sequence"]))
+
+    readout_signal = readout_signal[:, iter_start:, :, -steps["learning_window"] :]
+    target_signal = target_signal[:, iter_start:, :, -steps["learning_window"] :]
+
+    loss = 0.5 * np.mean(np.sum((readout_signal - target_signal) ** 2, axis=3), axis=(0, 2))
+
+    y_prediction = np.argmax(np.mean(readout_signal, axis=3), axis=0)
+    y_target = np.argmax(np.mean(target_signal, axis=3), axis=0)
+    accuracy = np.mean((y_target == y_prediction), axis=1)
+    recall_errors = 1.0 - accuracy
+
+    return loss, accuracy, recall_errors
+
+
+nest.Simulate(duration["pre_sim"])
+
 nest.SetStatus(gen_learning_window, params_gen_learning_window)
 
-target_signal_rescale_factor = 1.0
+for iteration in range(n_iter):
+    t_start_iteration = iteration * duration["evaluation_group"]
+    t_end_iteration = t_start_iteration + duration["evaluation_group"]
 
-for iteration in np.arange(n_iter):
-    t_start_iteration = iteration * evaluation_group_size * steps["sequence"]
-    t_end_iteration = t_start_iteration + evaluation_group_size * steps["sequence"]
+    if iteration != 0 and iteration % test_every == 0:
+        loader, eta = data_loader_test, eta_test
+    else:
+        loader, eta = data_loader_train, eta_train
 
-    loader = train_loader
-    params_common_syn_eprop["optimizer"]["eta"] = 5e-3
-    if iteration and iteration % 10 == 0:
-        loader = test_loader
-        params_common_syn_eprop["optimizer"]["eta"] = 0.0
-
+    params_common_syn_eprop["optimizer"]["eta"] = eta
     nest.SetDefaults("eprop_synapse", params_common_syn_eprop)
 
-    img_group, targets_group = loader.get_new_evaluation_group()
-
-    spike_times = [[] for _ in range(n_in)]
-    target_rates = np.zeros((n_out, evaluation_group_size * steps["sequence"]))
-    for group_elem in range(evaluation_group_size):
-        t_start_group_elem = group_elem * steps["sequence"]
-        t_end_group_elem = t_start_group_elem + steps["sequence"]
-
-        target_rates[targets_group[group_elem], t_start_group_elem:t_end_group_elem] = target_signal_rescale_factor
-
-        for n, relative_times in enumerate(img_group[group_elem]):
-            absolute_times = (t_start_iteration + t_start_group_elem) * np.ones_like(relative_times) + relative_times
-            spike_times[n] += absolute_times.tolist()
-
-    params_gen_spk_in = []
-    for spk_times in spike_times:
-        params_gen_spk_in.append({"spike_times": spk_times})
-
-    params_gen_rate_target = []
-    for target_rate in target_rates:
-        params_gen_rate_target.append(
-            {
-                "amplitude_times": np.arange(
-                    duration["total_offset"] + t_start_iteration, duration["total_offset"] + t_end_iteration
-                ),
-                "amplitude_values": target_rate,
-            }
-        )
+    params_gen_spk_in, params_gen_rate_target = create_input_output(loader)
 
     nest.SetStatus(gen_spk_in, params_gen_spk_in)
     nest.SetStatus(gen_rate_target, params_gen_rate_target)
-    nest.Simulate(evaluation_group_size * steps["sequence"])
+    nest.Simulate(duration["evaluation_group"])
 
-    """
-    process data of recording devices
-    """
-    events_mm_out = mm_out.get("events")
+    loss, accuracy, recall_errors = evaluate(iteration + 1, -1)
 
-    senders = events_mm_out["senders"]
-    readout_signal = events_mm_out["V_m"]
-    target_signal = events_mm_out["target_signal"]
-
-    readout_signal = np.array([readout_signal[senders == i] for i in set(senders)])  # nrns_out.tolist()
-    target_signal = np.array([target_signal[senders == i] for i in set(senders)])
-
-    readout_signal = readout_signal.reshape((n_out, iteration + 1, evaluation_group_size, steps["sequence"]))
-    readout_signal = readout_signal[:, -1, :, -steps["learning_window"] :]
-
-    target_signal = target_signal.reshape((n_out, iteration + 1, evaluation_group_size, steps["sequence"]))
-    target_signal = target_signal[:, -1, :, -steps["learning_window"] :]
-
-    """
-    calculate recall errors
-    """
-
-    mse = np.mean((target_signal - readout_signal) ** 2, axis=2)
-    distance_to_target = np.mean((target_signal_rescale_factor - readout_signal) ** 2, axis=2)
-
-    losses = np.mean(mse, axis=(0, 1))
-
-    y_prediction = np.argmin(distance_to_target, axis=0)
-    y_target = np.argmax(np.mean(target_signal, axis=2), axis=0)
-    accuracy = np.mean((y_target == y_prediction), axis=0)
-
-    print(f"    iter: {iteration} loss: {losses:0.5f} acc: {accuracy:0.5f}")
+    print(f"    iteration: {iteration} loss: {loss[0]:0.5f} accuracy: {accuracy[0]:0.5f}")
 
 # %% ###########################################################################################################
 # Read out post-training weights
@@ -720,30 +694,7 @@ events_wr = wr.get("events")
 # We evaluate the network's training error by calculating a loss - in this case, the mean squared error between
 # the integrated recurrent network activity and the target rate.
 
-readout_signal = events_mm_out["readout_signal"]  # corresponds to softmax
-target_signal = events_mm_out["target_signal"]
-senders = events_mm_out["senders"]
-
-readout_signal = np.array([readout_signal[senders == i] for i in set(senders)])
-target_signal = np.array([target_signal[senders == i] for i in set(senders)])
-
-readout_signal = readout_signal.reshape((n_out, n_iter, evaluation_group_size, steps["sequence"]))
-readout_signal = readout_signal[:, :, :, -steps["learning_window"] :]
-
-target_signal = target_signal.reshape((n_out, n_iter, evaluation_group_size, steps["sequence"]))
-target_signal = target_signal[:, :, :, -steps["learning_window"] :]
-
-mse = np.mean((target_signal - readout_signal) ** 2, axis=3)
-distance_to_target = np.mean((target_signal_rescale_factor - readout_signal) ** 2, axis=3)
-
-loss = np.mean(mse, axis=(0, 2))
-
-y_prediction = np.argmin(distance_to_target, axis=0)
-y_target = np.argmax(np.mean(target_signal, axis=3), axis=0)
-accuracy = np.mean((y_target == y_prediction), axis=1)
-recall_errors = 1.0 - accuracy
-
-print(accuracy)
+loss, accuracy, recall_errors = evaluate(n_iter, 0)
 
 # %% ###########################################################################################################
 # Plot results
@@ -791,8 +742,8 @@ axs[-1].xaxis.get_major_locator().set_params(integer=True)
 fig.tight_layout()
 
 # %% ###########################################################################################################
-# Plot recordables
-# ................
+# Plot spikes and dynamic variables
+# .................................
 # This plotting routine shows how to plot all of the recorded dynamic variables and spikes across time. We take
 # one snapshot in the first iteration and one snapshot at the end.
 
@@ -819,7 +770,10 @@ def plot_spikes(ax, events, nrns, ylabel, xlims):
     ax.set_ylim(np.min(senders_subset) - margin, np.max(senders_subset) + margin)
 
 
-for xlims in [(0, steps["sequence"]), (steps["task"] - steps["sequence"], steps["task"])]:
+for xlims in [
+    (steps["pre_sim"], steps["pre_sim"] + steps["sequence"]),
+    (steps["pre_sim"] + steps["task"] - steps["sequence"], steps["pre_sim"] + steps["task"]),
+]:
     fig, axs = plt.subplots(9, 1, sharex=True, figsize=(8, 14), gridspec_kw={"hspace": 0.4, "left": 0.2})
 
     plot_spikes(axs[0], events_sr, nrns_in, r"$z_i$" + "\n", xlims)
@@ -845,7 +799,7 @@ for xlims in [(0, steps["sequence"]), (steps["task"] - steps["sequence"], steps[
 # Similarly, we can plot the weight histories. Note that the weight recorder, attached to the synapses, works
 # differently than the other recorders. Since synapses only get activated when they transmit a spike, the weight
 # recorder only records the weight in those moments. That is why the first weight registrations do not start in
-# the first time step and we add the inital weights manually.
+# the first time step and we add the initial weights manually.
 
 
 def plot_weight_time_course(ax, events, nrns_senders, nrns_targets, label, ylabel):
@@ -866,9 +820,11 @@ def plot_weight_time_course(ax, events, nrns_senders, nrns_targets, label, ylabe
 
 fig, axs = plt.subplots(3, 1, sharex=True, figsize=(3, 4))
 
-plot_weight_time_course(axs[0], events_wr, nrns_in, nrns_rec, "in_rec", r"$W_\mathrm{in}$" + "\n(pA)")
-plot_weight_time_course(axs[1], events_wr, nrns_rec, nrns_rec, "rec_rec", r"$W_\mathrm{rec}$" + "\n(pA)")
-plot_weight_time_course(axs[2], events_wr, nrns_rec, nrns_out, "rec_out", r"$W_\mathrm{out}$" + "\n(pA)")
+plot_weight_time_course(axs[0], events_wr, nrns_in[:n_record_w], nrns_rec[:n_record_w], "in_rec", r"$W_\text{in}$ (pA)")
+plot_weight_time_course(
+    axs[1], events_wr, nrns_rec[:n_record_w], nrns_rec[:n_record_w], "rec_rec", r"$W_\text{rec}$ (pA)"
+)
+plot_weight_time_course(axs[2], events_wr, nrns_rec[:n_record_w], nrns_out, "rec_out", r"$W_\text{out}$ (pA)")
 
 axs[-1].set_xlabel(r"$t$ (ms)")
 axs[-1].set_xlim(0, steps["task"])

@@ -29,7 +29,8 @@ Description
 ~~~~~~~~~~~
 
 This script demonstrates supervised learning of a regression task with a recurrent spiking neural network that
-is equipped with the eligibility propagation (e-prop) plasticity mechanism by Bellec et al. [1]_.
+is equipped with the eligibility propagation (e-prop) plasticity mechanism by Bellec et al. [1]_ with
+additional biological features described in [3]_.
 
 This type of learning is demonstrated at the proof-of-concept task in [1]_. We based this script on their
 TensorFlow script given in [2]_.
@@ -62,7 +63,7 @@ References
 
 .. [2] https://github.com/IGITUGraz/eligibility_propagation/blob/master/Figure_3_and_S7_e_prop_tutorials/tutorial_pattern_generation.py
 
-.. [3] Korcsak-Gorzo A, Stapmanns J, Espinoza Valverde JA, Dahmen D, van Albada SJ, Bolten M, Diesmann M.
+.. [3] Korcsak-Gorzo A, Stapmanns J, Espinoza Valverde JA, Dahmen D, van Albada SJ, Plesser HE, Bolten M, Diesmann M.
        Event-based implementation of eligibility propagation (in preparation)
 """  # pylint: disable=line-too-long # noqa: E501
 
@@ -107,8 +108,12 @@ np.random.seed(rng_seed)  # fix numpy random seed
 # Define timing of task
 # .....................
 # The task's temporal structure is then defined, once as time steps and once as durations in milliseconds.
+# Even though each sample is processed independently during training, we aggregate predictions and true
+# labels across a group of samples during the evaluation phase. The number of samples in this group is
+# determined by the `group_size` parameter. This data is then used to assess the neural network's
+# performance metrics, such as average accuracy and mean error.
 
-n_batch = 1  # batch size, 1 in reference [2]
+group_size = 1  # number of instances over which to evaluate the learning performance
 n_iter = 5  # number of iterations, 2000 in reference [2]
 
 steps = {
@@ -116,7 +121,7 @@ steps = {
 }
 
 steps["learning_window"] = steps["sequence"]  # time steps of window with non-zero learning signals
-steps["task"] = n_iter * n_batch * steps["sequence"]  # time steps of task
+steps["task"] = n_iter * group_size * steps["sequence"]  # time steps of task
 
 steps.update(
     {
@@ -169,7 +174,7 @@ model_nrn_rec = "eprop_iaf"
 params_nrn_out = {
     "C_m": 1.0,  # pF, membrane capacitance - takes effect only if neurons get current input (here not the case)
     "E_L": 0.0,  # mV, leak / resting membrane potential
-    "eprop_isi_trace_cutoff": 10,  # cutoff of integration of eprop trace between spikes
+    "eprop_isi_trace_cutoff": 100,  # cutoff of integration of eprop trace between spikes
     "I_e": 0.0,  # pA, external current input
     "tau_m": 20.0,  # ms, membrane time constant
     "V_m": 0.0,  # mV, initial value of the membrane voltage
@@ -180,7 +185,7 @@ params_nrn_rec = {
     "C_m": 1.0,
     "c_reg": 300.0 / duration["sequence"],  # firing rate regularization scaling
     "E_L": 0.0,
-    "eprop_isi_trace_cutoff": 10,
+    "eprop_isi_trace_cutoff": 100,
     "f_target": 10.0,  # spikes/s, target firing rate for firing rate regularization
     "gamma": 0.3,  # height scaling of the pseudo-derivative
     "I_e": 0.0,
@@ -247,7 +252,7 @@ params_wr = {
 }
 
 params_sr = {
-    "start": duration["total_offset"],
+    "start": duration["offset_gen"],
     "stop": duration["total_offset"] + duration["task"],
 }
 
@@ -280,7 +285,7 @@ weights_out_rec = np.array(np.random.randn(n_rec, n_out) / np.sqrt(n_rec), dtype
 params_common_syn_eprop = {
     "optimizer": {
         "type": "gradient_descent",  # algorithm to optimize the weights
-        "batch_size": n_batch,
+        "batch_size": 1,
         "eta": 1e-4,  # learning rate
         "Wmin": -100.0,  # pA, minimal limit of the synaptic weights
         "Wmax": 100.0,  # pA, maximal limit of the synaptic weights
@@ -394,8 +399,19 @@ target_signal = generate_superimposed_sines(steps["sequence"], [1000, 500, 333, 
 
 params_gen_rate_target = {
     "amplitude_times": np.arange(0.0, duration["task"], duration["step"]) + duration["total_offset"],
-    "amplitude_values": np.tile(target_signal, n_iter * n_batch),
+    "amplitude_values": np.tile(target_signal, n_iter * group_size),
 }
+
+####################
+
+nest.SetStatus(gen_rate_target, params_gen_rate_target)
+
+# %% ###########################################################################################################
+# Create learning window
+# ~~~~~~~~~~~~~~~~~~~~~~
+# Custom learning windows, in which the network learns, can be defined with an additional signal. The error
+# signal is internally multiplied with this learning window signal. Passing a learning window signal of value 1
+# opens the learning window while passing a value of 0 closes it.
 
 params_gen_learning_window = {
     "amplitude_times": [duration["total_offset"]],
@@ -404,7 +420,6 @@ params_gen_learning_window = {
 
 ####################
 
-nest.SetStatus(gen_rate_target, params_gen_rate_target)
 nest.SetStatus(gen_learning_window, params_gen_learning_window)
 
 # %% ###########################################################################################################
@@ -480,9 +495,15 @@ events_wr = wr.get("events")
 
 readout_signal = events_mm_out["readout_signal"]
 target_signal = events_mm_out["target_signal"]
+senders = events_mm_out["senders"]
 
-error = (readout_signal - target_signal) ** 2
-loss = 0.5 * np.add.reduceat(error, np.arange(0, steps["task"], steps["sequence"]))
+readout_signal = np.array([readout_signal[senders == i] for i in set(senders)])
+target_signal = np.array([target_signal[senders == i] for i in set(senders)])
+
+readout_signal = readout_signal.reshape((n_out, n_iter, group_size, steps["sequence"]))
+target_signal = target_signal.reshape((n_out, n_iter, group_size, steps["sequence"]))
+
+loss = 0.5 * np.mean(np.sum((readout_signal - target_signal) ** 2, axis=3), axis=(0, 2))
 
 # %% ###########################################################################################################
 # Plot results

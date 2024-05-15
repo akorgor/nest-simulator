@@ -55,7 +55,7 @@ cues, and a last group defining the recall window, in which the network has to d
 compares the network signal :math:`\pi_k` with the teacher target signal :math:`\pi_k^*`, which it receives from
 a rate generator. Since the decision is at the end and all the cues are relevant, the network has to keep the
 cues in memory. Additional adaptive neurons in the network enable this memory. The network's training error is
-assessed by employing a cross-entropy error loss.
+assessed by employing a mean squared error loss.
 
 Details on the event-based NEST implementation of e-prop can be found in [3]_.
 
@@ -68,7 +68,7 @@ References
 
 .. [2] https://github.com/IGITUGraz/eligibility_propagation/blob/master/Figure_3_and_S7_e_prop_tutorials/tutorial_evidence_accumulation_with_alif.py
 
-.. [3] Korcsak-Gorzo A, Stapmanns J, Espinoza Valverde JA, Dahmen D, van Albada SJ, Bolten M, Diesmann M.
+.. [3] Korcsak-Gorzo A, Stapmanns J, Espinoza Valverde JA, Dahmen D, van Albada SJ, Plesser HE, Bolten M, Diesmann M.
        Event-based implementation of eligibility propagation (in preparation)
 """  # pylint: disable=line-too-long # noqa: E501
 
@@ -88,8 +88,8 @@ from IPython.display import Image
 # Schematic of network architecture
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # This figure, identical to the one in the description, shows the required network architecture in the center,
-# the input and output of the pattern generation task above, and lists of the required NEST device, neuron, and
-# synapse models below. The connections that must be established are numbered 1 to 7.
+# the input and output of the evidence accumulation task above, and lists of the required NEST device, neuron,
+# and synapse models below. The connections that must be established are numbered 1 to 7.
 
 try:
     Image(filename="./eprop_supervised_classification_schematic_evidence-accumulation.png")
@@ -113,11 +113,13 @@ np.random.seed(rng_seed)  # fix numpy random seed
 # Define timing of task
 # .....................
 # The task's temporal structure is then defined, once as time steps and once as durations in milliseconds.
-# Using a batch size larger than one aids the network in generalization, facilitating the solution to this task.
-# The original number of iterations requires distributed computing.
+# Even though each sample is processed independently during training, we aggregate predictions and true
+# labels across a group of samples during the evaluation phase. The number of samples in this group is
+# determined by the `group_size` parameter. This data is then used to assess the neural network's
+# performance metrics, such as average accuracy and mean error.
 
-n_batch = 1  # batch size, 64 in reference [2], 32 in the README to reference [2]
-n_iter = 5  # number of iterations, 2000 in reference [2], 50 with n_batch 32 converges
+group_size = 1  # number of instances over which to evaluate the learning performance, 32 for convergence
+n_iter = 5  # number of iterations, 50 with group_size 32 converges
 
 n_input_symbols = 4  # number of input populations, e.g. 4 = left, right, recall, noise
 n_cues = 7  # number of cues given before decision
@@ -133,7 +135,7 @@ steps = {
 steps["cues"] = n_cues * (steps["cue"] + steps["spacing"])  # time steps of all cues
 steps["sequence"] = steps["cues"] + steps["bg_noise"] + steps["recall"]  # time steps of one full sequence
 steps["learning_window"] = steps["recall"]  # time steps of window with non-zero learning signals
-steps["task"] = n_iter * n_batch * steps["sequence"]  # time steps of task
+steps["task"] = n_iter * group_size * steps["sequence"]  # time steps of task
 
 steps.update(
     {
@@ -184,12 +186,10 @@ n_reg = 50  # number of regular neurons
 n_rec = n_ad + n_reg  # number of recurrent neurons
 n_out = 2  # number of readout neurons
 
-model_nrn_reg = "eprop_iaf"
-
 params_nrn_out = {
     "C_m": 1.0,  # pF, membrane capacitance - takes effect only if neurons get current input (here not the case)
     "E_L": 0.0,  # mV, leak / resting membrane potential
-    "eprop_isi_trace_cutoff": 10,  # cutoff of integration of eprop trace between spikes
+    "eprop_isi_trace_cutoff": 100,  # cutoff of integration of eprop trace between spikes
     "I_e": 0.0,  # pA, external current input
     "tau_m": 20.0,  # ms, membrane time constant
     "V_m": 0.0,  # mV, initial value of the membrane voltage
@@ -200,7 +200,7 @@ params_nrn_reg = {
     "C_m": 1.0,
     "c_reg": 300.0 / duration["sequence"] * duration["learning_window"],  # firing rate regularization scaling
     "E_L": 0.0,
-    "eprop_isi_trace_cutoff": 10,
+    "eprop_isi_trace_cutoff": 100,
     "f_target": 10.0,  # spikes/s, target firing rate for firing rate regularization
     "gamma": 0.3,  # height scaling of the pseudo-derivative
     "I_e": 0.0,
@@ -212,11 +212,6 @@ params_nrn_reg = {
     "kappa": 0.95,  # low-pass filter of the eligibility trace
 }
 
-if model_nrn_reg == "eprop_iaf_psc_delta":
-    params_nrn_reg["V_reset"] = -0.5  # mV, reset membrane voltage
-    params_nrn_reg["c_reg"] = 2.0 / duration["sequence"] * duration["learning_window"]
-    params_nrn_reg["V_th"] = 0.5
-
 params_nrn_ad = {
     "beta": 1.0,
     "adapt_tau": 2000.0,  # ms, time constant of adaptive threshold
@@ -224,7 +219,7 @@ params_nrn_ad = {
     "C_m": 1.0,
     "c_reg": 300.0 / duration["sequence"] * duration["learning_window"],
     "E_L": 0.0,
-    "eprop_isi_trace_cutoff": 10,  # cutoff of integration of eprop trace between spikes
+    "eprop_isi_trace_cutoff": 100,  # cutoff of integration of eprop trace between spikes
     "f_target": 10.0,
     "gamma": 0.3,
     "I_e": 0.0,
@@ -249,14 +244,13 @@ params_nrn_ad["adapt_beta"] = 1.7 * (
 gen_spk_in = nest.Create("spike_generator", n_in)
 nrns_in = nest.Create("parrot_neuron", n_in)
 
-nrns_reg = nest.Create(model_nrn_reg, n_reg, params_nrn_reg)
+nrns_reg = nest.Create("eprop_iaf", n_reg, params_nrn_reg)
 nrns_ad = nest.Create("eprop_iaf_adapt", n_ad, params_nrn_ad)
 nrns_out = nest.Create("eprop_readout", n_out, params_nrn_out)
 gen_rate_target = nest.Create("step_rate_generator", n_out)
+gen_learning_window = nest.Create("step_rate_generator")
 
 nrns_rec = nrns_reg + nrns_ad
-
-gen_learning_window = nest.Create("step_rate_generator")
 
 # %% ###########################################################################################################
 # Create recorders
@@ -302,7 +296,7 @@ params_wr = {
 }
 
 params_sr = {
-    "start": duration["total_offset"],
+    "start": duration["offset_gen"],
     "stop": duration["total_offset"] + duration["task"],
 }
 
@@ -345,7 +339,7 @@ weights_out_rec = np.array(np.random.randn(n_rec, n_out), dtype=dtype_weights)
 params_common_syn_eprop = {
     "optimizer": {
         "type": "adam",  # algorithm to optimize the weights
-        "batch_size": n_batch,
+        "batch_size": 1,
         "beta_1": 0.9,  # exponential decay rate for 1st moment estimate of Adam optimizer
         "beta_2": 0.999,  # exponential decay rate for 2nd moment raw estimate of Adam optimizer
         "epsilon": 1e-8,  # small numerical stabilization constant of Adam optimizer
@@ -480,7 +474,7 @@ target_cues_list = []
 
 for iteration in range(n_iter):
     input_spike_bools, target_cues = generate_evidence_accumulation_input_output(
-        n_batch, n_in, prob_group, input_spike_prob, n_cues, n_input_symbols, steps
+        group_size, n_in, prob_group, input_spike_prob, n_cues, n_input_symbols, steps
     )
     input_spike_bools_list.append(input_spike_bools)
     target_cues_list.extend(target_cues.tolist())
@@ -493,8 +487,8 @@ params_gen_spk_in = [
     for nrn_in_idx in range(n_in)
 ]
 
-target_rate_changes = np.zeros((n_out, n_batch * n_iter))
-target_rate_changes[np.array(target_cues_list), np.arange(n_batch * n_iter)] = 1
+target_rate_changes = np.zeros((n_out, group_size * n_iter))
+target_rate_changes[np.array(target_cues_list), np.arange(group_size * n_iter)] = 1
 
 params_gen_rate_target = [
     {
@@ -504,16 +498,28 @@ params_gen_rate_target = [
     for nrn_out_idx in range(n_out)
 ]
 
+####################
+
+nest.SetStatus(gen_spk_in, params_gen_spk_in)
+nest.SetStatus(gen_rate_target, params_gen_rate_target)
+
+# %% ###########################################################################################################
+# Create learning window
+# ~~~~~~~~~~~~~~~~~~~~~~
+# Custom learning windows, in which the network learns, can be defined with an additional signal. The error
+# signal is internally multiplied with this learning window signal. Passing a learning window signal of value 1
+# opens the learning window while passing a value of 0 closes it.
+
 amplitude_times = np.hstack(
     [
         np.array([0.0, duration["sequence"] - duration["learning_window"]])
         + duration["total_offset"]
         + i * duration["sequence"]
-        for i in range(n_batch * n_iter)
+        for i in range(group_size * n_iter)
     ]
 )
 
-amplitude_values = np.array([0.0, 1.0] * n_batch * n_iter)
+amplitude_values = np.array([0.0, 1.0] * group_size * n_iter)
 
 params_gen_learning_window = {
     "amplitude_times": amplitude_times,
@@ -522,8 +528,6 @@ params_gen_learning_window = {
 
 ####################
 
-nest.SetStatus(gen_spk_in, params_gen_spk_in)
-nest.SetStatus(gen_rate_target, params_gen_rate_target)
 nest.SetStatus(gen_learning_window, params_gen_learning_window)
 
 # %% ###########################################################################################################
@@ -595,23 +599,23 @@ events_wr = wr.get("events")
 # %% ###########################################################################################################
 # Evaluate training error
 # ~~~~~~~~~~~~~~~~~~~~~~~
-# We evaluate the network's training error by calculating a loss - in this case, the cross-entropy error between
+# We evaluate the network's training error by calculating a loss - in this case, the mean squared error between
 # the integrated recurrent network activity and the target rate.
 
-readout_signal = events_mm_out["readout_signal"]  # corresponds to softmax
+readout_signal = events_mm_out["readout_signal"]
 target_signal = events_mm_out["target_signal"]
 senders = events_mm_out["senders"]
 
 readout_signal = np.array([readout_signal[senders == i] for i in set(senders)])
 target_signal = np.array([target_signal[senders == i] for i in set(senders)])
 
-readout_signal = readout_signal.reshape((n_out, n_iter, n_batch, steps["sequence"]))
-readout_signal = readout_signal[:, :, :, -steps["learning_window"] :]
+readout_signal = readout_signal.reshape((n_out, n_iter, group_size, steps["sequence"]))
+target_signal = target_signal.reshape((n_out, n_iter, group_size, steps["sequence"]))
 
-target_signal = target_signal.reshape((n_out, n_iter, n_batch, steps["sequence"]))
+readout_signal = readout_signal[:, :, :, -steps["learning_window"] :]
 target_signal = target_signal[:, :, :, -steps["learning_window"] :]
 
-loss = 0.5 * np.mean(np.sum((readout_signal - target_signal) ** 2, axis=0), axis=(1, 2))
+loss = 0.5 * np.mean(np.sum((readout_signal - target_signal) ** 2, axis=3), axis=(0, 2))
 
 y_prediction = np.argmax(np.mean(readout_signal, axis=3), axis=0)
 y_target = np.argmax(np.mean(target_signal, axis=3), axis=0)
@@ -652,7 +656,7 @@ plt.rcParams.update(
 fig, axs = plt.subplots(2, 1, sharex=True)
 
 axs[0].plot(range(1, n_iter + 1), loss)
-axs[0].set_ylabel(r"$E = -\sum_{t,k} \pi_k^{*,t} \log \pi_k^t$")
+axs[0].set_ylabel(r"$E = \frac{1}{2} \sum_{t,k} \left( y_k^t -y_k^{*,t}\right)^2$")
 
 axs[1].plot(range(1, n_iter + 1), recall_errors)
 axs[1].set_ylabel("recall errors")
@@ -710,9 +714,9 @@ for xlims in [(0, steps["sequence"]), (steps["task"] - steps["sequence"], steps[
     plot_recordable(axs[9], events_mm_ad, "learning_signal", r"$L_j$" + "\n(pA)", xlims)
 
     plot_recordable(axs[10], events_mm_out, "V_m", r"$v_k$" + "\n(mV)", xlims)
-    plot_recordable(axs[11], events_mm_out, "target_signal", r"$\pi^*_k$" + "\n", xlims)
-    plot_recordable(axs[12], events_mm_out, "readout_signal", r"$\pi_k$" + "\n", xlims)
-    plot_recordable(axs[13], events_mm_out, "error_signal", r"$\pi_k-\pi^*_k$" + "\n", xlims)
+    plot_recordable(axs[11], events_mm_out, "target_signal", r"$y^*_k$" + "\n", xlims)
+    plot_recordable(axs[12], events_mm_out, "readout_signal", r"$y_k$" + "\n", xlims)
+    plot_recordable(axs[13], events_mm_out, "error_signal", r"$y_k-y^*_k$" + "\n", xlims)
 
     axs[-1].set_xlabel(r"$t$ (ms)")
     axs[-1].set_xlim(*xlims)
