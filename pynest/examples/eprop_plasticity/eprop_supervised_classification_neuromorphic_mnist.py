@@ -119,8 +119,8 @@ np.random.seed(rng_seed)  # fix numpy random seed
 # determined by the `group_size` parameter. This data is then used to assess the neural network's
 # performance metrics, such as average accuracy and mean error.
 
-group_size = 4  # number of instances over which to evaluate the learning performance, 100 for convergence
-n_iter = 4  # number of iterations, 200 for convergence
+group_size = 100  # number of instances over which to evaluate the learning performance, 100 for convergence
+n_iter = 100  # number of iterations, 200 for convergence
 test_every = 10  # cyclical number of training iterations after which to test the performance
 
 steps = {}
@@ -179,7 +179,7 @@ nest.set_verbosity("M_FATAL")
 pixels_blocklist = np.loadtxt("./NMNIST_pixels_blocklist.txt")
 
 n_in = 2 * 34 * 34 - len(pixels_blocklist)  # number of input neurons
-n_rec = 100  # number of recurrent neurons
+n_rec = 150  # number of recurrent neurons
 n_out = 10  # number of readout neurons
 
 params_nrn_out = {
@@ -187,26 +187,25 @@ params_nrn_out = {
     "E_L": 0.0,  # mV, leak / resting membrane potential
     "eprop_isi_trace_cutoff": 100,  # cutoff of integration of eprop trace between spikes
     "I_e": 0.0,  # pA, external current input
-    "tau_m": 2.0,  # ms, membrane time constant
+    "tau_m": 100.0,  # ms, membrane time constant
     "V_m": 0.0,  # mV, initial value of the membrane voltage
 }
 
 params_nrn_rec = {
     "beta": 1.0,  # width scaling of the pseudo-derivative
     "C_m": 1.0,
-    "c_reg": 2.0 / duration["sequence"] * duration["learning_window"],  # firing rate regularization scaling
+    "c_reg": 300.0 / duration["sequence"],  # firing rate regularization scaling
     "E_L": 0.0,
     "eprop_isi_trace_cutoff": 100,
     "f_target": 10.0,  # spikes/s, target firing rate for firing rate regularization
     "gamma": 0.3,  # height scaling of the pseudo-derivative
     "I_e": 0.0,
-    "regular_spike_arrival": True,
     "surrogate_gradient_function": "piecewise_linear",  # surrogate gradient / pseudo-derivative function
     "t_ref": 0.0,  # ms, duration of refractory period
-    "tau_m": 20.0,
+    "tau_m": 30.0,
     "V_m": 0.0,
-    "V_th": 0.6,  # mV, spike threshold membrane voltage
-    "kappa": 0.71,  # low-pass filter of the eligibility trace
+    "V_th": 0.03,  # mV, spike threshold membrane voltage
+    "kappa": 0.99,  # low-pass filter of the eligibility trace
 }
 
 ####################
@@ -302,28 +301,30 @@ def create_mask(weights, sparsity_level):
 
 
 dtype_weights = np.float32  # data type of weights - for reproducing TF results set to np.float32
-weights_in_rec = np.array(np.random.randn(n_in, n_rec).T / np.sqrt(n_in), dtype=dtype_weights)
-weights_rec_rec = np.array(np.random.randn(n_rec, n_rec).T / np.sqrt(n_rec), dtype=dtype_weights)
+
+rescaling_factor = 1.0 - np.exp(-1.0 / params_nrn_rec["tau_m"])  # rescaling factor of the weights
+weights_in_rec = rescaling_factor * np.array(np.random.randn(n_in, n_rec).T / np.sqrt(n_in), dtype=dtype_weights)
+weights_rec_rec = rescaling_factor * np.array(np.random.randn(n_rec, n_rec).T / np.sqrt(n_rec), dtype=dtype_weights)
 np.fill_diagonal(weights_rec_rec, 0.0)  # since no autapses set corresponding weights to zero
-weights_rec_out = np.array(calculate_glorot_dist(n_rec, n_out).T, dtype=dtype_weights)
+weights_rec_out = rescaling_factor * np.array(calculate_glorot_dist(n_rec, n_out).T, dtype=dtype_weights)
 weights_out_rec = np.array(np.random.randn(n_rec, n_out), dtype=dtype_weights)
 
-weights_in_rec *= create_mask(weights_in_rec, 0.9)
-weights_rec_rec *= create_mask(weights_rec_rec, 0.98)
+weights_in_rec *= create_mask(weights_in_rec, 0.75)
+weights_rec_rec *= create_mask(weights_rec_rec, 0.99)
 weights_rec_out *= create_mask(weights_rec_out, 0.0)
 
 params_common_syn_eprop = {
     "optimizer": {
         "type": "gradient_descent",  # algorithm to optimize the weights
         "batch_size": 1,
-        "eta": 5e-3,  # learning rate
+        "eta": 0.0,  # learning rate
         "Wmin": -100.0,  # pA, minimal limit of the synaptic weights
         "Wmax": 100.0,  # pA, maximal limit of the synaptic weights
     },
     "weight_recorder": wr,
 }
 
-eta_train = 5e-3
+eta_train = 5e-4 * rescaling_factor
 eta_test = 0.0
 
 params_syn_base = {
@@ -649,7 +650,7 @@ for iteration in range(n_iter):
     t_start_iteration = iteration * duration["evaluation_group"]
     t_end_iteration = t_start_iteration + duration["evaluation_group"]
 
-    if iteration != 0 and iteration % test_every == 0:
+    if iteration >= n_iter - 10:
         loader, eta = data_loader_test, eta_test
     else:
         loader, eta = data_loader_train, eta_train
