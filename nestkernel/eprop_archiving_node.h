@@ -299,6 +299,7 @@ public:
    * @param c_reg The firing rate regularization coefficient.
    */
   void write_firing_rate_reg_to_history( const long time_step,
+    const long interval_step,
     const double z,
     const double f_target,
     const double kappa_reg,
