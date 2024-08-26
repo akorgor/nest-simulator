@@ -105,6 +105,7 @@ except Exception:
 
 parser = argparse.ArgumentParser()
 
+parser.add_argument("--reset_neurons", type=bool, default=True)
 parser.add_argument("--apply_dales_law", type=str.lower, nargs="*", default=[])
 parser.add_argument("--average_gradient", type=bool, default=True)
 parser.add_argument("--batch_size", type=int, default=1)
@@ -189,7 +190,7 @@ duration.update({key: value * duration["step"] for key, value in steps.items()})
 
 params_setup = {
     "eprop_learning_window": duration["learning_window"],
-    "eprop_reset_neurons_on_update": True,  # if True, reset dynamic variables at start of each update interval
+    "eprop_reset_neurons_on_update": args.reset_neurons,  # if True, reset dynamic variables at start of each update interval
     "eprop_update_interval": duration["sequence"],  # ms, time interval for updating the synaptic weights
     "print_time": False,  # if True, print time progress bar during simulation, set False if run as code cell
     "resolution": duration["step"],
