@@ -99,7 +99,8 @@ except Exception:
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--reset_neurons", type=bool, default=True)
+parser.add_argument("--reset_neurons", action='store_true')
+parser.add_argument("--record_dynamics", action='store_true')
 parser.add_argument("--apply_dales_law", type=str.lower, nargs="*", default=[])
 parser.add_argument("--average_gradient", type=bool, default=False)
 parser.add_argument("--batch_size", type=int, default=1)
@@ -114,7 +115,6 @@ parser.add_argument("--seed", type=int, default=1)
 parser.add_argument("--surrogate_gradient", type=str.lower, default="piecewise_linear")
 parser.add_argument("--surrogate_gradient_beta", type=float, default=1.0)
 parser.add_argument("--surrogate_gradient_gamma", type=float, default=0.3)
-parser.add_argument("--record_dynamics", type=bool, default=False)
 
 args = parser.parse_args()
 

@@ -104,7 +104,8 @@ except Exception:
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--reset_neurons", type=bool, default=True)
+parser.add_argument("--reset_neurons", action='store_true')
+parser.add_argument("--record_dynamics", action='store_true')
 parser.add_argument("--apply_dales_law", type=str.lower, nargs="*", default=[])
 parser.add_argument("--batch_size", type=int, default=32)
 parser.add_argument("--group_size", type=int, default=32)
