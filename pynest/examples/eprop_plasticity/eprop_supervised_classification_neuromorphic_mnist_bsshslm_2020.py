@@ -107,8 +107,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--reset_neurons", action='store_true')
 parser.add_argument("--record_dynamics", action='store_true')
 parser.add_argument("--apply_dales_law", type=str.lower, nargs="*", default=[])
-parser.add_argument("--batch_size", type=int, default=32)
-parser.add_argument("--group_size", type=int, default=32)
+parser.add_argument("--batch_size", type=int, default=2)
+parser.add_argument("--group_size", type=int, default=2)
 parser.add_argument("--c_reg", type=float, default=2.0)
 parser.add_argument("--cutoff", type=int, default=100)
 parser.add_argument("--eta", type=float, default=5e-3)
@@ -309,11 +309,13 @@ for params in [params_mm_rec, params_mm_out, params_wr, params_sr_in, params_sr_
     params.update({"record_to": "ascii", "precision": 16})
 ####################
 
-mm_rec = nest.Create("multimeter", params_mm_rec)
 mm_out = nest.Create("multimeter", params_mm_out)
-sr_in = nest.Create("spike_recorder", params_sr_in)
-sr_rec = nest.Create("spike_recorder", params_sr_rec)
-wr = nest.Create("weight_recorder", params_wr)
+
+if args.record_dynamics:
+    mm_rec = nest.Create("multimeter", params_mm_rec)
+    sr_in = nest.Create("spike_recorder", params_sr_in)
+    sr_rec = nest.Create("spike_recorder", params_sr_rec)
+    wr = nest.Create("weight_recorder", params_wr)
 
 nrns_rec_record = nrns_rec[:n_record]
 
@@ -365,9 +367,11 @@ params_common_syn_eprop = {
         "Wmin": -100.0,  # pA, minimal limit of the synaptic weights
         "Wmax": 100.0,  # pA, maximal limit of the synaptic weights
     },
-    "weight_recorder": wr,
     "average_gradient": False,  # if True, average the gradient over the learning window
 }
+
+if args.record_dynamics:
+    params_common_syn_eprop["weight_recorder"] = wr
 
 eta_train = args.eta
 eta_test = 0.0
@@ -437,11 +441,13 @@ nest.Connect(nrns_out, nrns_rec, params_conn_all_to_all, params_syn_feedback)  #
 nest.Connect(gen_rate_target, nrns_out, params_conn_one_to_one, params_syn_rate_target)  # connection 6
 nest.Connect(nrns_out, nrns_out, params_conn_all_to_all, params_syn_out_out)  # connection 7
 
-nest.Connect(nrns_in, sr_in, params_conn_all_to_all, params_syn_static)
-nest.Connect(nrns_rec, sr_rec, params_conn_all_to_all, params_syn_static)
+if args.record_dynamics:
+    nest.Connect(nrns_in, sr_in, params_conn_all_to_all, params_syn_static)
+    nest.Connect(nrns_rec, sr_rec, params_conn_all_to_all, params_syn_static)
 
-nest.Connect(mm_rec, nrns_rec_record, params_conn_all_to_all, params_syn_static)
+    nest.Connect(mm_rec, nrns_rec_record, params_conn_all_to_all, params_syn_static)
 nest.Connect(mm_out, nrns_out, params_conn_all_to_all, params_syn_static)
+
 tools.constrain_weights(
     nrns_in,
     nrns_rec,
@@ -644,12 +650,12 @@ def get_weights(pop_pre, pop_post):
     conns["weight_matrix"][conns["targets"], conns["senders"]] = conns["weight"]
     return conns
 
-
-weights_pre_train = {
-    "in_rec": get_weights(nrns_in, nrns_rec),
-    "rec_rec": get_weights(nrns_rec, nrns_rec),
-    "rec_out": get_weights(nrns_rec, nrns_out),
-}
+if args.record_dynamics:
+    weights_pre_train = {
+        "in_rec": get_weights(nrns_in, nrns_rec),
+        "rec_rec": get_weights(nrns_rec, nrns_rec),
+        "rec_out": get_weights(nrns_rec, nrns_out),
+    }
 
 # %% ###########################################################################################################
 # Simulate
@@ -718,26 +724,30 @@ for iteration in range(n_iter):
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # After the training, we can read out the optimized final weights.
 
-weights_post_train = {
-    "in_rec": get_weights(nrns_in, nrns_rec),
-    "rec_rec": get_weights(nrns_rec, nrns_rec),
-    "rec_out": get_weights(nrns_rec, nrns_out),
-}
+if args.record_dynamics:
+    weights_post_train = {
+        "in_rec": get_weights(nrns_in, nrns_rec),
+        "rec_rec": get_weights(nrns_rec, nrns_rec),
+        "rec_out": get_weights(nrns_rec, nrns_out),
+    }
 
 # %% ###########################################################################################################
 # Read out recorders
 # ~~~~~~~~~~~~~~~~~~
 # We can also retrieve the recorded history of the dynamic variables and weights, as well as detected spikes.
 
-tools.save_weights_snapshots(weights_pre_train, weights_post_train)
+if args.record_dynamics:
+    tools.save_weights_snapshots(weights_pre_train, weights_post_train)
 tools.process_recordings(duration, nrns_in, nrns_rec, nrns_out)
 tools.process_timing(nest.GetKernelStatus())
 
-events_mm_rec = tools.get_events("multimeter_rec")
 events_mm_out = tools.get_events("multimeter_out")
-events_sr_in = tools.get_events("spike_recorder_in")
-events_sr_rec = tools.get_events("spike_recorder_rec")
-events_wr = tools.get_events("weight_recorder")
+
+if args.record_dynamics:
+    events_mm_rec = tools.get_events("multimeter_rec")
+    events_sr_in = tools.get_events("spike_recorder_in")
+    events_sr_rec = tools.get_events("spike_recorder_rec")
+    events_wr = tools.get_events("weight_recorder")
 
 # %% ###########################################################################################################
 # Evaluate training error
