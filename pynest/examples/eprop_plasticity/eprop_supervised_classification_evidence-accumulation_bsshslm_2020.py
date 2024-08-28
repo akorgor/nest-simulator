@@ -104,8 +104,7 @@ except Exception:
 # ~~~~~
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--reset_neurons", action='store_true')
-parser.add_argument("--record_dynamics", action='store_true')
+
 parser.add_argument("--apply_dales_law", type=str.lower, nargs="*", default=[])
 parser.add_argument("--average_gradient", type=bool, default=True)
 parser.add_argument("--batch_size", type=int, default=1)
@@ -115,7 +114,9 @@ parser.add_argument("--loss", type=str, default="cross_entropy")
 parser.add_argument("--n_iter", type=int, default=5)
 parser.add_argument("--nvp", type=int, default=1)
 parser.add_argument("--prevent_weight_sign_change", type=str.lower, nargs="*", default=[])
+parser.add_argument('--record_dynamics', action=argparse.BooleanOptionalAction,  default=True)
 parser.add_argument("--recordings_dir", type=str, default="./")
+parser.add_argument('--reset_neurons', action=argparse.BooleanOptionalAction,  default=True)
 parser.add_argument("--seed", type=int, default=1)
 parser.add_argument("--surrogate_gradient", type=str.lower, default="piecewise_linear")
 parser.add_argument("--surrogate_gradient_beta", type=float, default=1.0)

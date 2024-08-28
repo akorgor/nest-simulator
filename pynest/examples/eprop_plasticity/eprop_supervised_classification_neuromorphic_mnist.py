@@ -104,7 +104,6 @@ except Exception:
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--record_dynamics", action='store_true')
 parser.add_argument("--apply_dales_law", type=str.lower, nargs="*", default=[])
 parser.add_argument("--group_size", type=int, default=32)
 parser.add_argument("--c_reg", type=float, default=2.0)
@@ -115,6 +114,7 @@ parser.add_argument("--n_iter_train", type=int, default=4)
 parser.add_argument("--n_iter_test", type=int, default=1)
 parser.add_argument("--nvp", type=int, default=1)
 parser.add_argument("--prevent_weight_sign_change", type=str.lower, nargs="*", default=[])
+parser.add_argument('--record_dynamics', action=argparse.BooleanOptionalAction,  default=True)
 parser.add_argument("--recordings_dir", type=str, default="./")
 parser.add_argument("--seed", type=int, default=1)
 parser.add_argument("--surrogate_gradient", type=str.lower, default="piecewise_linear")
