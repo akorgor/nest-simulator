@@ -329,29 +329,23 @@ eprop_readout::handle( DataLoggingRequest& e )
   B_.logger_.handle( e );
 }
 
-void
-eprop_readout::compute_gradient( const long t_spike,
+double
+eprop_readout::compute_gradient( const long t_compute_until,
   const long t_spike_previous,
   double& z_previous_buffer,
   double& z_bar,
   double& e_bar,
   double& e_bar_reg,
   double& epsilon,
-  double& weight,
-  const CommonSynapseProperties& cp,
-  WeightOptimizer* optimizer )
+  const long cutoff_to_spike_interval )
 {
   double z = 0.0;                // spiking variable
   double z_current_buffer = 1.0; // buffer containing the spike that triggered the current integration
   double L = 0.0;                // error signal
   double grad = 0.0;             // gradient
 
-  const EpropSynapseCommonProperties& ecp = static_cast< const EpropSynapseCommonProperties& >( cp );
-  const auto optimize_each_step = ( *ecp.optimizer_cp_ ).optimize_each_step_;
 
   auto eprop_hist_it = get_eprop_history( t_spike_previous - 1 );
-
-  const long t_compute_until = std::min( t_spike_previous + V_.eprop_isi_trace_cutoff_steps_, t_spike );
 
   for ( long t = t_spike_previous; t < t_compute_until; ++t, ++eprop_hist_it )
   {
@@ -363,28 +357,14 @@ eprop_readout::compute_gradient( const long t_spike,
 
     z_bar = V_.P_v_m_ * z_bar + V_.P_z_in_ * z;
 
-    if ( optimize_each_step )
-    {
-      grad = L * z_bar;
-      weight = optimizer->optimized_weight( *ecp.optimizer_cp_, t, grad, weight );
-    }
-    else
-    {
-      grad += L * z_bar;
-    }
+    grad += L * z_bar;
   }
-
-  if ( not optimize_each_step )
-  {
-    weight = optimizer->optimized_weight( *ecp.optimizer_cp_, t_compute_until, grad, weight );
-  }
-
-  const long cutoff_to_spike_interval = t_spike - t_spike_previous - V_.eprop_isi_trace_cutoff_steps_;
 
   if ( cutoff_to_spike_interval > 0 )
   {
     z_bar *= std::pow( V_.P_v_m_, cutoff_to_spike_interval );
   }
+  return grad;
 }
 
 } // namespace nest

@@ -378,17 +378,15 @@ eprop_iaf::handle( DataLoggingRequest& e )
   B_.logger_.handle( e );
 }
 
-void
-eprop_iaf::compute_gradient( const long t_spike,
+double
+eprop_iaf::compute_gradient( const long t_compute_until,
   const long t_spike_previous,
   double& z_previous_buffer,
   double& z_bar,
   double& e_bar,
   double& e_bar_reg,
   double& epsilon,
-  double& weight,
-  const CommonSynapseProperties& cp,
-  WeightOptimizer* optimizer )
+  const long cutoff_to_spike_interval )
 {
   double e = 0.0;                // eligibility trace
   double z = 0.0;                // spiking variable
@@ -398,12 +396,7 @@ eprop_iaf::compute_gradient( const long t_spike,
   double firing_rate_reg = 0.0;  // firing rate regularization term
   double grad = 0.0;             // gradient
 
-  const EpropSynapseCommonProperties& ecp = static_cast< const EpropSynapseCommonProperties& >( cp );
-  const auto optimize_each_step = ( *ecp.optimizer_cp_ ).optimize_each_step_;
-
   auto eprop_hist_it = get_eprop_history( t_spike_previous - 1 );
-
-  const long t_compute_until = std::min( t_spike_previous + V_.eprop_isi_trace_cutoff_steps_, t_spike );
 
   for ( long t = t_spike_previous; t < t_compute_until; ++t, ++eprop_hist_it )
   {
@@ -420,23 +413,8 @@ eprop_iaf::compute_gradient( const long t_spike,
     e_bar = P_.kappa_ * e_bar + ( 1.0 - P_.kappa_ ) * e;
     e_bar_reg = P_.kappa_reg_ * e_bar_reg + ( 1.0 - P_.kappa_reg_ ) * e;
 
-    if ( optimize_each_step )
-    {
-      grad = L * e_bar + firing_rate_reg * e_bar_reg;
-      weight = optimizer->optimized_weight( *ecp.optimizer_cp_, t, grad, weight );
-    }
-    else
-    {
-      grad += L * e_bar + firing_rate_reg * e_bar_reg;
-    }
+    grad += L * e_bar + firing_rate_reg * e_bar_reg;
   }
-
-  if ( not optimize_each_step )
-  {
-    weight = optimizer->optimized_weight( *ecp.optimizer_cp_, t_compute_until, grad, weight );
-  }
-
-  const long cutoff_to_spike_interval = t_spike - t_spike_previous - V_.eprop_isi_trace_cutoff_steps_;
 
   if ( cutoff_to_spike_interval > 0 )
   {
@@ -444,6 +422,7 @@ eprop_iaf::compute_gradient( const long t_spike,
     e_bar *= std::pow( P_.kappa_, cutoff_to_spike_interval );
     e_bar_reg *= std::pow( P_.kappa_reg_, cutoff_to_spike_interval );
   }
+  return grad;
 }
 
 } // namespace nest
