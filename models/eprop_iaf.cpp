@@ -378,7 +378,7 @@ eprop_iaf::handle( DataLoggingRequest& e )
   B_.logger_.handle( e );
 }
 
-double
+void
 eprop_iaf::compute_gradient( const long t_compute_until,
   const long t_spike_previous,
   double& z_previous_buffer,
@@ -386,7 +386,8 @@ eprop_iaf::compute_gradient( const long t_compute_until,
   double& e_bar,
   double& e_bar_reg,
   double& epsilon,
-  const long cutoff_to_spike_interval )
+  const long cutoff_to_spike_interval,
+  double& grad )
 {
   double e = 0.0;                // eligibility trace
   double z = 0.0;                // spiking variable
@@ -394,7 +395,6 @@ eprop_iaf::compute_gradient( const long t_compute_until,
   double psi = 0.0;              // surrogate gradient
   double L = 0.0;                // learning signal
   double firing_rate_reg = 0.0;  // firing rate regularization term
-  double grad = 0.0;             // gradient
 
   auto eprop_hist_it = get_eprop_history( t_spike_previous - 1 );
 
@@ -422,7 +422,6 @@ eprop_iaf::compute_gradient( const long t_compute_until,
     e_bar *= std::pow( P_.kappa_, cutoff_to_spike_interval );
     e_bar_reg *= std::pow( P_.kappa_reg_, cutoff_to_spike_interval );
   }
-  return grad;
 }
 
 } // namespace nest

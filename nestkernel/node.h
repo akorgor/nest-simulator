@@ -832,14 +832,15 @@ public:
    * @param optimizer [in] Instance of weight optimizer.
    *
    */
-  virtual double compute_gradient( const long t_compute_until,
+  virtual void compute_gradient( const long t_compute_until,
     const long t_spike_previous,
     double& z_previous_buffer,
     double& z_bar,
     double& e_bar,
     double& e_bar_reg,
     double& epsilon,
-    const long cutoff_to_spike_interval );
+    const long cutoff_to_spike_interval,
+    double& grad );
 
   /**
    * Compute gradient change for eprop synapses.

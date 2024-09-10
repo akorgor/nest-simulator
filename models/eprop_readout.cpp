@@ -329,7 +329,7 @@ eprop_readout::handle( DataLoggingRequest& e )
   B_.logger_.handle( e );
 }
 
-double
+void
 eprop_readout::compute_gradient( const long t_compute_until,
   const long t_spike_previous,
   double& z_previous_buffer,
@@ -337,12 +337,12 @@ eprop_readout::compute_gradient( const long t_compute_until,
   double& e_bar,
   double& e_bar_reg,
   double& epsilon,
-  const long cutoff_to_spike_interval )
+  const long cutoff_to_spike_interval,
+  double& grad )
 {
   double z = 0.0;                // spiking variable
   double z_current_buffer = 1.0; // buffer containing the spike that triggered the current integration
   double L = 0.0;                // error signal
-  double grad = 0.0;             // gradient
 
 
   auto eprop_hist_it = get_eprop_history( t_spike_previous - 1 );
@@ -364,7 +364,6 @@ eprop_readout::compute_gradient( const long t_compute_until,
   {
     z_bar *= std::pow( V_.P_v_m_, cutoff_to_spike_interval );
   }
-  return grad;
 }
 
 } // namespace nest

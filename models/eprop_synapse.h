@@ -489,18 +489,20 @@ eprop_synapse< targetidentifierT >::send( Event& e, size_t thread, const EpropSy
   const long eprop_isi_trace_cutoff = target->get_eprop_isi_trace_cutoff();
   if ( t_spike_previous_ != 0 )
   {
+    double grad = 0.0;
     const long t_compute_until = std::min( t_spike_previous_ + eprop_isi_trace_cutoff, t_spike );
     const long cutoff_to_spike_interval = t_spike - t_compute_until;
-    const double gradient = target->compute_gradient( t_compute_until,
+    target->compute_gradient( t_compute_until,
       t_spike_previous_,
       z_previous_buffer_,
       z_bar_,
       e_bar_,
       e_bar_reg_,
       epsilon_,
-      cutoff_to_spike_interval );
+      cutoff_to_spike_interval,
+      grad );
 
-    weight_ = optimizer_->optimized_weight( *cp.optimizer_cp_, t_compute_until, gradient, weight_ );
+    weight_ = optimizer_->optimized_weight( *cp.optimizer_cp_, t_compute_until, grad, weight_ );
   }
 
   target->write_update_to_history( t_spike_previous_, t_spike, eprop_isi_trace_cutoff, false );

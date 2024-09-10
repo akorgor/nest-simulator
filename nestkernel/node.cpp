@@ -547,8 +547,8 @@ nest::Node::get_tau_syn_in( int )
   throw UnexpectedEvent();
 }
 
-double
-nest::Node::compute_gradient( const long, const long, double&, double&, double&, double&, double&, const long )
+void
+nest::Node::compute_gradient( const long, const long, double&, double&, double&, double&, double&, const long, double& )
 {
   throw IllegalConnection( "The target node does not support compute_gradient()." );
 }

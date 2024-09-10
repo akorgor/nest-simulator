@@ -333,14 +333,15 @@ private:
 
   void update( Time const&, const long, const long ) override;
 
-  double compute_gradient( const long t_compute_until,
+  void compute_gradient( const long t_compute_until,
     const long t_spike_previous,
     double& z_previous_buffer,
     double& z_bar,
     double& e_bar,
     double& e_bar_reg,
     double& epsilon,
-    const long cutoff_to_spike_interval ) override;
+    const long cutoff_to_spike_interval,
+    double& grad ) override;
 
   long get_shift() const override;
   bool is_eprop_recurrent_node() const override;
