@@ -236,7 +236,7 @@ class Tools:
                 2.29426963047102,
                 2.29407265212433,
                 2.29758026605794,
-            ]             
+            ]
         elif file_name == "eprop_supervised_regression_lemniscate_bsshslm_2020.py":
             loss_reference = [
                 314.30442538643001,
