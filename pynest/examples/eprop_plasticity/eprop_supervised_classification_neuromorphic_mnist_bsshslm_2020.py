@@ -242,6 +242,9 @@ params_nrn_rec = {
     "V_th": 0.6,  # mV, spike threshold membrane voltage
 }
 
+params_nrn_rec["gamma"] /= params_nrn_rec["V_th"]
+params_nrn_rec["beta"] /= np.abs(params_nrn_rec["V_th"])
+
 ####################
 
 # Intermediate parrot neurons required between input spike generators and recurrent neurons,
@@ -613,7 +616,7 @@ def create_input_output(loader, t_start_iteration, t_end_iteration, target_signa
     return params_gen_spk_in, params_gen_rate_target
 
 
-save_path = "./"  # path to save the N-MNIST dataset to
+save_path = "./"  # path to save the N-MNIST dataset to'
 train_path, test_path = download_and_extract_nmnist_dataset(save_path)
 
 selected_labels = [label for label in range(n_out)]

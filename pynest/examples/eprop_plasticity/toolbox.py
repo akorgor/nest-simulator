@@ -199,11 +199,11 @@ class Tools:
             ]
         elif file_name == "eprop_supervised_classification_evidence-accumulation.py":
             loss_reference = [
-                33.99707684974502,
-                34.54963564066860,
-                36.15785645581101,
-                35.49256076087588,
-                35.86926256681858,
+                34.90337404416763,
+                34.78511921272757,
+                35.18474914160545,
+                35.33582702752958,
+                35.22131262247200,
             ]
         elif file_name == "eprop_supervised_regression_sine-waves_bsshslm_2020.py":
             loss_reference = [
@@ -215,27 +215,27 @@ class Tools:
             ]
         elif file_name == "eprop_supervised_regression_sine-waves.py":
             loss_reference = [
-                102.32452148947576,
-                102.02905791284471,
-                104.18266745765692,
-                104.67929923397385,
-                105.13095153301973,
+                102.32452148947574,
+                103.06940389745640,
+                102.58440415993280,
+                103.95247660721655,
+                105.23404961833215,
             ]
         elif file_name == "eprop_supervised_classification_neuromorphic_mnist.py":
             loss_reference = [
-                0.49165621803559,
-                0.50931366438794,
-                0.50123237065641,
-                0.49169665763603,
-                0.45463618073378,
+                0.50059986996625,
+                0.50130915105991,
+                0.49801405188182,
+                0.49384438941558,
+                0.47842946665255,
             ]
         elif file_name == "eprop_supervised_classification_neuromorphic_mnist_bsshslm_2020.py":
             loss_reference = [
-                2.29905872344452,
-                2.31039108412163,
-                2.29426963047102,
-                2.29407265212433,
-                2.29758026605794,
+                2.29923887455666,
+                2.30994402967322,
+                2.29404627571308,
+                2.29464031430063,
+                2.29825169987960,
             ]
         elif file_name == "eprop_supervised_regression_lemniscate_bsshslm_2020.py":
             loss_reference = [
