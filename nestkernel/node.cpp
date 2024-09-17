@@ -565,7 +565,14 @@ nest::Node::compute_gradient( const long,
 }
 
 double
-nest::Node::compute_gradient( std::vector< long >&, const long, const long, const double, const bool )
+nest::Node::compute_gradient( std::vector< long >&,
+  const long,
+  const long,
+  const double,
+  const bool,
+  double&,
+  double&,
+  double& )
 {
   throw IllegalConnection( "The target node does not support compute_gradient()." );
 }

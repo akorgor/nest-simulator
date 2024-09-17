@@ -382,14 +382,16 @@ eprop_readout_bsshslm_2020::compute_gradient( std::vector< long >& presyn_isis,
   const long,
   const long t_previous_trigger_spike,
   const double kappa,
-  const bool average_gradient )
+  const bool average_gradient,
+  double& z_bar,
+  double& e_bar,
+  double& epsilon )
 {
   auto eprop_hist_it = get_eprop_history( t_previous_trigger_spike );
 
-  double grad = 0.0;  // gradient value to be calculated
-  double L = 0.0;     // error signal
-  double z = 0.0;     // spiking variable
-  double z_bar = 0.0; // low-pass filtered spiking variable
+  double grad = 0.0; // gradient value to be calculated
+  double L = 0.0;    // error signal
+  double z = 0.0;    // spiking variable
 
   for ( long presyn_isi : presyn_isis )
   {
