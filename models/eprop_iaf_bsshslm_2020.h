@@ -311,7 +311,9 @@ private:
 
   void update( Time const&, const long, const long ) override;
 
-  double compute_gradient( std::vector< long >&, const long, const long, const double, const bool ) override;
+  double
+  compute_gradient( std::vector< long >&, const long, const long, const double, const bool, double&, double&, double& )
+    override;
 
   long get_shift() const override;
   bool is_eprop_recurrent_node() const override;
