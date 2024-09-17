@@ -115,9 +115,9 @@ parser.add_argument("--n_iter_train", type=int, default=4)
 parser.add_argument("--n_iter_test", type=int, default=1)
 parser.add_argument("--nvp", type=int, default=1)
 parser.add_argument("--prevent_weight_sign_change", type=str.lower, nargs="*", default=[])
-parser.add_argument('--record_dynamics', action=argparse.BooleanOptionalAction,  default=True)
+parser.add_argument("--record_dynamics", action=argparse.BooleanOptionalAction, default=True)
 parser.add_argument("--recordings_dir", type=str, default="./")
-parser.add_argument('--reset_neurons', action=argparse.BooleanOptionalAction,  default=True)
+parser.add_argument("--reset_neurons", action=argparse.BooleanOptionalAction, default=True)
 parser.add_argument("--seed", type=int, default=1)
 parser.add_argument("--surrogate_gradient", type=str.lower, default="piecewise_linear")
 parser.add_argument("--surrogate_gradient_beta", type=float, default=1.0)
@@ -241,6 +241,9 @@ params_nrn_rec = {
     "V_m": 0.0,
     "V_th": 0.6,  # mV, spike threshold membrane voltage
 }
+
+params_nrn_rec["gamma"] /= params_nrn_rec["V_th"]
+params_nrn_rec["beta"] /= np.abs(params_nrn_rec["V_th"])
 
 ####################
 
@@ -613,7 +616,7 @@ def create_input_output(loader, t_start_iteration, t_end_iteration, target_signa
     return params_gen_spk_in, params_gen_rate_target
 
 
-save_path = "./"  # path to save the N-MNIST dataset to
+save_path = "./"  # path to save the N-MNIST dataset to'
 train_path, test_path = download_and_extract_nmnist_dataset(save_path)
 
 selected_labels = [label for label in range(n_out)]
@@ -649,6 +652,7 @@ def get_weights(pop_pre, pop_post):
     conns["weight_matrix"] = np.zeros((len(pop_post), len(pop_pre)))
     conns["weight_matrix"][conns["targets"], conns["senders"]] = conns["weight"]
     return conns
+
 
 if args.record_dynamics:
     weights_pre_train = {

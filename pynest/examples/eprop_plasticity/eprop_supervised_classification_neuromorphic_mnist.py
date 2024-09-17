@@ -112,16 +112,17 @@ parser.add_argument("--c_reg", type=float, default=2.0)
 parser.add_argument("--cutoff", type=int, default=100)
 parser.add_argument("--eta", type=float, default=5e-3)
 parser.add_argument("--kappa", type=float, default=0.99)
+parser.add_argument("--kappa_reg", type=float, default=0.99)
 parser.add_argument("--n_iter_train", type=int, default=4)
 parser.add_argument("--n_iter_test", type=int, default=1)
 parser.add_argument("--nvp", type=int, default=1)
 parser.add_argument("--prevent_weight_sign_change", type=str.lower, nargs="*", default=[])
-parser.add_argument('--record_dynamics', action=argparse.BooleanOptionalAction,  default=True)
+parser.add_argument("--record_dynamics", action=argparse.BooleanOptionalAction, default=True)
 parser.add_argument("--recordings_dir", type=str, default="./")
 parser.add_argument("--seed", type=int, default=1)
 parser.add_argument("--surrogate_gradient", type=str.lower, default="piecewise_linear")
-parser.add_argument("--surrogate_gradient_beta", type=float, default=1.0)
-parser.add_argument("--surrogate_gradient_gamma", type=float, default=0.3)
+parser.add_argument("--surrogate_gradient_beta", type=float, default=1.7)
+parser.add_argument("--surrogate_gradient_gamma", type=float, default=0.5)
 
 args = parser.parse_args()
 
@@ -232,8 +233,8 @@ params_nrn_rec = {
     "f_target": 10.0,  # spikes/s, target firing rate for firing rate regularization
     "gamma": args.surrogate_gradient_gamma,  # height scaling of the pseudo-derivative
     "I_e": 0.0,
-    "kappa": 0.99,  # low-pass filter of the eligibility trace
-    "kappa_reg": 0.99,  # low-pass filter of the firing rate for regularization
+    "kappa": args.kappa,  # low-pass filter of the eligibility trace
+    "kappa_reg": args.kappa_reg,  # low-pass filter of the firing rate for regularization
     "regular_spike_arrival": True,
     "surrogate_gradient_function": args.surrogate_gradient,  # surrogate gradient / pseudo-derivative function
     "t_ref": 0.0,  # ms, duration of refractory period
