@@ -355,6 +355,15 @@ private:
   //! Vector of presynaptic inter-spike-intervals.
   std::vector< long > presyn_isis_;
 
+  // Low-pass filtered spiking variable.
+  double z_bar = 0.0;
+
+  //! Low-pass filtered eligibility trace.
+  double e_bar = 0.0;
+
+  //! Adaptive component of eligibility vector.
+  double epsilon = 0.0;
+
   /**
    *  Optimizer
    *
@@ -529,11 +538,6 @@ eprop_synapse_bsshslm_2020< targetidentifierT >::send( Event& e,
 
   const long interval_step = ( t_spike - shift ) % update_interval;
 
-  if ( target->is_eprop_recurrent_node() and interval_step == 0 )
-  {
-    return false;
-  }
-
   if ( t_previous_trigger_spike_ == 0 )
   {
     t_previous_trigger_spike_ = t_spike;
@@ -552,8 +556,14 @@ eprop_synapse_bsshslm_2020< targetidentifierT >::send( Event& e,
 
     target->write_update_to_history( t_previous_update_, t_current_update );
 
-    const double gradient = target->compute_gradient(
-      presyn_isis_, t_previous_update_, t_previous_trigger_spike_, kappa_, cp.average_gradient_ );
+    const double gradient = target->compute_gradient( presyn_isis_,
+      t_previous_update_,
+      t_previous_trigger_spike_,
+      kappa_,
+      cp.average_gradient_,
+      z_bar,
+      e_bar,
+      epsilon );
 
     weight_ = optimizer_->optimized_weight( *cp.optimizer_cp_, idx_current_update, gradient, weight_ );
 

@@ -419,19 +419,19 @@ eprop_iaf_adapt_bsshslm_2020::compute_gradient( std::vector< long >& presyn_isis
   const long t_previous_update,
   const long t_previous_trigger_spike,
   const double kappa,
-  const bool average_gradient )
+  const bool average_gradient,
+  double& z_bar,
+  double& e_bar,
+  double& epsilon )
 {
   auto eprop_hist_it = get_eprop_history( t_previous_trigger_spike );
 
-  double e = 0.0;       // eligibility trace
-  double e_bar = 0.0;   // low-pass filtered eligibility trace
-  double epsilon = 0.0; // adaptive component of eligibility vector
-  double grad = 0.0;    // gradient value to be calculated
-  double L = 0.0;       // learning signal
-  double psi = 0.0;     // surrogate gradient
-  double sum_e = 0.0;   // sum of eligibility traces
-  double z = 0.0;       // spiking variable
-  double z_bar = 0.0;   // low-pass filtered spiking variable
+  double e = 0.0;     // eligibility trace
+  double grad = 0.0;  // gradient value to be calculated
+  double L = 0.0;     // learning signal
+  double psi = 0.0;   // surrogate gradient
+  double sum_e = 0.0; // sum of eligibility traces
+  double z = 0.0;     // spiking variable
 
   for ( long presyn_isi : presyn_isis )
   {
