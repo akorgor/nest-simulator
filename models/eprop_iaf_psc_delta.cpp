@@ -313,17 +313,17 @@ eprop_iaf_psc_delta::update( Time const& origin, const long from, const long to 
   {
     const long t = origin.get_steps() + lag;
 
-    const auto z_in = B_.spikes_.get_value( lag );
+    auto z_in = B_.spikes_.get_value( lag );
 
     if ( S_.r_ == 0 ) // not refractory, can spike
     {
-      S_.v_m_ = V_.P_i_in_ * ( S_.i_in_ + P_.I_e_ ) + V_.P_v_m_ * S_.v_m_ + z_in;
-
       if ( P_.with_refr_input_ and S_.refr_spikes_buffer_ != 0.0 )
       {
-        S_.v_m_ += S_.refr_spikes_buffer_;
+        z_in += S_.refr_spikes_buffer_;
         S_.refr_spikes_buffer_ = 0.0;
       }
+
+      S_.v_m_ = V_.P_i_in_ * ( S_.i_in_ + P_.I_e_ ) + V_.P_v_m_ * S_.v_m_ + z_in;
 
       S_.v_m_ = ( S_.v_m_ < P_.V_min_ ? P_.V_min_ : S_.v_m_ );
     }
