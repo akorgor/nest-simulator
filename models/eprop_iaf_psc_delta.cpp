@@ -324,8 +324,7 @@ eprop_iaf_psc_delta::update( Time const& origin, const long from, const long to 
       }
 
       S_.v_m_ = V_.P_i_in_ * ( S_.i_in_ + P_.I_e_ ) + V_.P_v_m_ * S_.v_m_ + z_in;
-
-      S_.v_m_ = ( S_.v_m_ < P_.V_min_ ? P_.V_min_ : S_.v_m_ );
+      S_.v_m_ = std::max( S_.v_m_, P_.V_min_ );
     }
     else
     {
