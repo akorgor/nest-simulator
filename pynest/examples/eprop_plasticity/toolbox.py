@@ -135,14 +135,25 @@ class Tools:
         for recorder_label in recorder_labels:
             save_file = f"{self.args.recordings_dir}/{recorder_label}"
 
-            if os.path.exists(f"{save_file}.csv"):
-                df = pd.read_csv(f"{save_file}.csv")
-            else:
-                df = pd.DataFrame()
+            file_names = sorted(glob.glob(f"{save_file}*.dat"))
 
-            for fname in sorted(glob.glob(f"{save_file}*.dat")):
-                df = pd.concat([df, pd.read_csv(f"{fname}", skiprows=2, sep="\t")], ignore_index=True)
+            dfs = []
+
+            if os.path.exists(f"{save_file}.csv"):
+                dfs.append(pd.read_csv(f"{save_file}.csv"))
+
+            for fname in file_names:
+                df_new = pd.read_csv(f"{file_names[0]}", skiprows=2, sep="\t")
+                if not df_new.empty:
+                    dfs.append(df_new)
                 os.remove(fname)
+
+            if not dfs:
+                df = df_new
+            elif len(dfs) == 1 or (len(dfs) == 2 and dfs[0].empty):
+                df = dfs[-1]
+            else:
+                df = pd.concat(dfs, ignore_index=True)
 
             if recorder_label == "weight_recorder":
                 self.save_weight_recordings(nrns_in + nrns_rec, nrns_rec + nrns_out, df, "", recorder_label)
