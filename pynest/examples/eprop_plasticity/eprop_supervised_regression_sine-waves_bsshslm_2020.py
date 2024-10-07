@@ -38,7 +38,7 @@ In this task, the network learns to generate an arbitrary N-dimensional temporal
 network learns to reproduce with its overall spiking activity a one-dimensional, one-second-long target signal
 which is a superposition of four sine waves of different amplitudes, phases, and periods.
 
-.. image:: ../../../../pynest/examples/eprop_plasticity/eprop_supervised_regression_sine-waves_bsshslm_2020.png
+.. image:: eprop_supervised_regression_sine-waves_bsshslm_2020.png
    :width: 70 %
    :alt: Schematic of network architecture. Same as Figure 1 in the code.
    :align: center
@@ -578,7 +578,6 @@ colors = {
 
 plt.rcParams.update(
     {
-        "font.sans-serif": "Arial",
         "axes.spines.right": False,
         "axes.spines.top": False,
         "axes.prop_cycle": cycler(color=[colors["blue"], colors["red"]]),
@@ -662,7 +661,10 @@ for title, xlims in zip(
 # the first time step and we add the initial weights manually.
 
 
-def plot_weight_time_course(ax, events, nrns_senders, nrns_targets, label, ylabel):
+def plot_weight_time_course(ax, events, nrns_weight_record, label, ylabel):
+    sender_label, target_label = label.split("_")
+    nrns_senders = nrns_weight_record[sender_label]
+    nrns_targets = nrns_weight_record[target_label]
     for sender in nrns_senders.tolist():
         for target in nrns_targets.tolist():
             idc_syn = (events["senders"] == sender) & (events["targets"] == target)
@@ -681,11 +683,15 @@ def plot_weight_time_course(ax, events, nrns_senders, nrns_targets, label, ylabe
 fig, axs = plt.subplots(3, 1, sharex=True, figsize=(3, 4))
 fig.suptitle("Weight time courses")
 
-plot_weight_time_course(axs[0], events_wr, nrns_in[:n_record_w], nrns_rec[:n_record_w], "in_rec", r"$W_\text{in}$ (pA)")
-plot_weight_time_course(
-    axs[1], events_wr, nrns_rec[:n_record_w], nrns_rec[:n_record_w], "rec_rec", r"$W_\text{rec}$ (pA)"
-)
-plot_weight_time_course(axs[2], events_wr, nrns_rec[:n_record_w], nrns_out, "rec_out", r"$W_\text{out}$ (pA)")
+nrns_weight_record = {
+    "in": nrns_in[:n_record_w],
+    "rec": nrns_rec[:n_record_w],
+    "out": nrns_out,
+}
+
+plot_weight_time_course(axs[0], events_wr, nrns_weight_record, "in_rec", r"$W_\text{in}$ (pA)")
+plot_weight_time_course(axs[1], events_wr, nrns_weight_record, "rec_rec", r"$W_\text{rec}$ (pA)")
+plot_weight_time_course(axs[2], events_wr, nrns_weight_record, "rec_out", r"$W_\text{out}$ (pA)")
 
 axs[-1].set_xlabel(r"$t$ (ms)")
 axs[-1].set_xlim(0, steps["task"])

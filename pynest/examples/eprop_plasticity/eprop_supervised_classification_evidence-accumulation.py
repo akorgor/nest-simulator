@@ -40,7 +40,7 @@ taking a left and a right turn of which one is correct. After a number of iterat
 infer the underlying rationale of the task. Here, the solution is to turn to the side in which more cues were
 presented.
 
-.. image:: ../../../../pynest/examples/eprop_plasticity/eprop_supervised_classification_evidence-accumulation.png
+.. image:: eprop_supervised_classification_evidence-accumulation.png
    :width: 70 %
    :alt: Schematic of network architecture. Same as Figure 1 in the code.
    :align: center
@@ -112,8 +112,8 @@ parser.add_argument("--batch_size", type=int, default=1)
 parser.add_argument("--c_reg", type=float, default=300.0)
 parser.add_argument("--cutoff", type=int, default=100)
 parser.add_argument("--eta", type=float, default=5e-3)
-parser.add_argument("--kappa", type=float, default=0.97)
-parser.add_argument("--kappa_reg", type=float, default=0.97)
+parser.add_argument("--kappa", type=float, default=0.95)
+parser.add_argument("--kappa_reg", type=float, default=0.95)
 parser.add_argument("--n_iter", type=int, default=5)
 parser.add_argument("--nvp", type=int, default=1)
 parser.add_argument("--prevent_weight_sign_change", type=str.lower, nargs="*", default=[])
@@ -150,9 +150,12 @@ np.random.seed(rng_seed)  # fix numpy random seed
 group_size = args.batch_size  # number of instances over which to evaluate the learning performance
 n_iter = args.n_iter  # number of iterations
 
-n_input_symbols = 4  # number of input populations, e.g. 4 = left, right, recall, noise
-n_cues = 7  # number of cues given before decision
-prob_group = 0.3  # probability with which one input group is present
+input = {
+    "n_symbols": 4,  # number of input populations, e.g. 4 = left, right, recall, noise
+    "n_cues": 7,  # number of cues given before decision
+    "prob_group": 0.3,  # probability with which one input group is present
+    "spike_prob": 0.04,  # spike probability of frozen input noise
+}
 
 steps = {
     "cue": 100,  # time steps in one cue presentation
@@ -161,7 +164,7 @@ steps = {
     "recall": 150,  # time steps of recall
 }
 
-steps["cues"] = n_cues * (steps["cue"] + steps["spacing"])  # time steps of all cues
+steps["cues"] = input["n_cues"] * (steps["cue"] + steps["spacing"])  # time steps of all cues
 steps["sequence"] = steps["cues"] + steps["bg_noise"] + steps["recall"]  # time steps of one full sequence
 steps["learning_window"] = steps["recall"]  # time steps of window with non-zero learning signals
 steps["task"] = n_iter * group_size * steps["sequence"]  # time steps of task
@@ -222,7 +225,6 @@ params_nrn_out = {
     "E_L": 0.0,  # mV, leak / resting membrane potential
     "eprop_isi_trace_cutoff": args.cutoff,  # cutoff of integration of eprop trace between spikes
     "I_e": 0.0,  # pA, external current input
-    "regular_spike_arrival": False,  # If True, input spikes arrive at end of time step, if False at beginning
     "tau_m": 20.0,  # ms, membrane time constant
     "V_m": 0.0,  # mV, initial value of the membrane voltage
 }
@@ -230,7 +232,9 @@ params_nrn_out = {
 params_nrn_reg = {
     "beta": args.surrogate_gradient_beta,  # width scaling of the pseudo-derivative
     "C_m": 1.0,
-    "c_reg": args.c_reg / duration["sequence"] * duration["learning_window"],  # coefficient of firing rate regularization
+    "c_reg": args.c_reg
+    / duration["sequence"]
+    * duration["learning_window"],  # coefficient of firing rate regularization
     "E_L": 0.0,
     "eprop_isi_trace_cutoff": args.cutoff,
     "f_target": 10.0,  # spikes/s, target firing rate for firing rate regularization
@@ -238,7 +242,6 @@ params_nrn_reg = {
     "I_e": 0.0,
     "kappa": args.kappa,  # low-pass filter of the eligibility trace
     "kappa_reg": args.kappa_reg,  # low-pass filter of the firing rate for regularization
-    "regular_spike_arrival": True,
     "surrogate_gradient_function": args.surrogate_gradient,  # surrogate gradient / pseudo-derivative function
     "t_ref": 5.0,  # ms, duration of refractory period
     "tau_m": 20.0,
@@ -259,7 +262,6 @@ params_nrn_ad = {
     "I_e": 0.0,
     "kappa": args.kappa,  # low-pass filter of the eligibility trace
     "kappa_reg": args.kappa_reg,  # low-pass filter of the firing rate for regularization
-    "regular_spike_arrival": True,
     "surrogate_gradient_function": args.surrogate_gradient,
     "t_ref": 5.0,
     "tau_m": 20.0,
@@ -271,6 +273,10 @@ params_nrn_ad["adapt_beta"] = 1.7 * (
     (1.0 - np.exp(-duration["step"] / params_nrn_ad["adapt_tau"]))
     / (1.0 - np.exp(-duration["step"] / params_nrn_ad["tau_m"]))
 )  # prefactor of adaptive threshold
+
+scale_factor = 1.0 - params_nrn_reg["kappa"]  # factor for rescaling due to removal of irregular spike arrival
+params_nrn_reg["c_reg"] /= scale_factor**2
+params_nrn_ad["c_reg"] /= scale_factor**2
 
 ####################
 
@@ -393,8 +399,8 @@ dtype_weights = np.float32  # data type of weights - for reproducing TF results 
 weights_in_rec = np.array(np.random.randn(n_in, n_rec).T / np.sqrt(n_in), dtype=dtype_weights)
 weights_rec_rec = np.array(np.random.randn(n_rec, n_rec).T / np.sqrt(n_rec), dtype=dtype_weights)
 np.fill_diagonal(weights_rec_rec, 0.0)  # since no autapses set corresponding weights to zero
-weights_rec_out = np.array(calculate_glorot_dist(n_rec, n_out).T, dtype=dtype_weights)
-weights_out_rec = np.array(np.random.randn(n_rec, n_out), dtype=dtype_weights)
+weights_rec_out = np.array(calculate_glorot_dist(n_rec, n_out).T, dtype=dtype_weights) * scale_factor
+weights_out_rec = np.array(np.random.randn(n_rec, n_out), dtype=dtype_weights) / scale_factor
 
 params_common_syn_eprop = {
     "optimizer": {
@@ -403,7 +409,7 @@ params_common_syn_eprop = {
         "beta_1": 0.9,  # exponential decay rate for 1st moment estimate of Adam optimizer
         "beta_2": 0.999,  # exponential decay rate for 2nd moment raw estimate of Adam optimizer
         "epsilon": 1e-8,  # small numerical stabilization constant of Adam optimizer
-        "eta": args.eta / duration["learning_window"],  # learning rate
+        "eta": args.eta / duration["learning_window"] * scale_factor**2,  # learning rate
         "optimize_each_step": True,  # call optimizer every time step (True) or once per spike (False); only
         # True implements original Adam algorithm, False offers speed-up; choice can affect learning performance
         "Wmin": -100.0,  # pA, minimal limit of the synaptic weights
@@ -504,25 +510,23 @@ nest.GetConnections(nrns_rec[0], nrns_rec[1:3]).set([params_init_optimizer] * 2)
 # assigned randomly to the left or right.
 
 
-def generate_evidence_accumulation_input_output(
-    batch_size, n_in, prob_group, input_spike_prob, n_cues, n_input_symbols, steps
-):
-    n_pop_nrn = n_in // n_input_symbols
+def generate_evidence_accumulation_input_output(batch_size, n_in, steps, input):
+    n_pop_nrn = n_in // input["n_symbols"]
 
-    prob_choices = np.array([prob_group, 1 - prob_group], dtype=np.float32)
+    prob_choices = np.array([input["prob_group"], 1 - input["prob_group"]], dtype=np.float32)
     idx = np.random.choice([0, 1], batch_size)
     probs = np.zeros((batch_size, 2), dtype=np.float32)
     probs[:, 0] = prob_choices[idx]
     probs[:, 1] = prob_choices[1 - idx]
 
-    batched_cues = np.zeros((batch_size, n_cues), dtype=int)
+    batched_cues = np.zeros((batch_size, input["n_cues"]), dtype=int)
     for b_idx in range(batch_size):
-        batched_cues[b_idx, :] = np.random.choice([0, 1], n_cues, p=probs[b_idx])
+        batched_cues[b_idx, :] = np.random.choice([0, 1], input["n_cues"], p=probs[b_idx])
 
     input_spike_probs = np.zeros((batch_size, steps["sequence"], n_in))
 
     for b_idx in range(batch_size):
-        for c_idx in range(n_cues):
+        for c_idx in range(input["n_cues"]):
             cue = batched_cues[b_idx, c_idx]
 
             step_start = c_idx * (steps["cue"] + steps["spacing"]) + steps["spacing"]
@@ -531,29 +535,26 @@ def generate_evidence_accumulation_input_output(
             pop_nrn_start = cue * n_pop_nrn
             pop_nrn_stop = pop_nrn_start + n_pop_nrn
 
-            input_spike_probs[b_idx, step_start:step_stop, pop_nrn_start:pop_nrn_stop] = input_spike_prob
+            input_spike_probs[b_idx, step_start:step_stop, pop_nrn_start:pop_nrn_stop] = input["spike_prob"]
 
-    input_spike_probs[:, -steps["recall"] :, 2 * n_pop_nrn : 3 * n_pop_nrn] = input_spike_prob
-    input_spike_probs[:, :, 3 * n_pop_nrn :] = input_spike_prob / 4.0
+    input_spike_probs[:, -steps["recall"] :, 2 * n_pop_nrn : 3 * n_pop_nrn] = input["spike_prob"]
+    input_spike_probs[:, :, 3 * n_pop_nrn :] = input["spike_prob"] / 4.0
     input_spike_bools = input_spike_probs > np.random.rand(input_spike_probs.size).reshape(input_spike_probs.shape)
     input_spike_bools[:, 0, :] = 0  # remove spikes in 0th time step of every sequence for technical reasons
 
     target_cues = np.zeros(batch_size, dtype=int)
-    target_cues[:] = np.sum(batched_cues, axis=1) > int(n_cues / 2)
+    target_cues[:] = np.sum(batched_cues, axis=1) > int(input["n_cues"] / 2)
 
     return input_spike_bools, target_cues
 
 
-input_spike_prob = 0.04  # spike probability of frozen input noise
 dtype_in_spks = np.float32  # data type of input spikes - for reproducing TF results set to np.float32
 
 input_spike_bools_list = []
 target_cues_list = []
 
 for _ in range(n_iter):
-    input_spike_bools, target_cues = generate_evidence_accumulation_input_output(
-        group_size, n_in, prob_group, input_spike_prob, n_cues, n_input_symbols, steps
-    )
+    input_spike_bools, target_cues = generate_evidence_accumulation_input_output(group_size, n_in, steps, input)
     input_spike_bools_list.append(input_spike_bools)
     target_cues_list.extend(target_cues)
 
@@ -732,7 +733,6 @@ colors = {
 
 plt.rcParams.update(
     {
-        "font.sans-serif": "Arial",
         "axes.spines.right": False,
         "axes.spines.top": False,
         "axes.prop_cycle": cycler(color=[colors["blue"], colors["red"]]),
@@ -828,7 +828,10 @@ for title, xlims in zip(
 # the first time step and we add the initial weights manually.
 
 
-def plot_weight_time_course(ax, events, nrns_senders, nrns_targets, label, ylabel):
+def plot_weight_time_course(ax, events, nrns_weight_record, label, ylabel):
+    sender_label, target_label = label.split("_")
+    nrns_senders = nrns_weight_record[sender_label]
+    nrns_targets = nrns_weight_record[target_label]
     for sender in nrns_senders.tolist():
         for target in nrns_targets.tolist():
             idc_syn = (events["senders"] == sender) & (events["targets"] == target)
@@ -847,11 +850,15 @@ def plot_weight_time_course(ax, events, nrns_senders, nrns_targets, label, ylabe
 fig, axs = plt.subplots(3, 1, sharex=True, figsize=(3, 4))
 fig.suptitle("Weight time courses")
 
-plot_weight_time_course(axs[0], events_wr, nrns_in[:n_record_w], nrns_rec[:n_record_w], "in_rec", r"$W_\text{in}$ (pA)")
-plot_weight_time_course(
-    axs[1], events_wr, nrns_rec[:n_record_w], nrns_rec[:n_record_w], "rec_rec", r"$W_\text{rec}$ (pA)"
-)
-plot_weight_time_course(axs[2], events_wr, nrns_rec[:n_record_w], nrns_out, "rec_out", r"$W_\text{out}$ (pA)")
+nrns_weight_record = {
+    "in": nrns_in[:n_record_w],
+    "rec": nrns_rec[:n_record_w],
+    "out": nrns_out,
+}
+
+plot_weight_time_course(axs[0], events_wr, nrns_weight_record, "in_rec", r"$W_\text{in}$ (pA)")
+plot_weight_time_course(axs[1], events_wr, nrns_weight_record, "rec_rec", r"$W_\text{rec}$ (pA)")
+plot_weight_time_course(axs[2], events_wr, nrns_weight_record, "rec_out", r"$W_\text{out}$ (pA)")
 
 axs[-1].set_xlabel(r"$t$ (ms)")
 axs[-1].set_xlim(0, steps["task"])

@@ -37,7 +37,7 @@ captures changes in pixel intensity through a dynamic vision sensor, converting 
 binary events, which we interpret as spike trains. This conversion closely emulates biological neural
 processing, making it a fitting challenge for an e-prop-equipped spiking neural network (SNN).
 
-.. image:: ../../../../pynest/examples/eprop_plasticity/eprop_supervised_classification_evidence-accumulation.png
+.. image:: eprop_supervised_classification_evidence-accumulation.png
    :width: 70 %
    :alt: Schematic of network architecture. Same as Figure 1 in the code.
    :align: center
@@ -219,7 +219,6 @@ params_nrn_out = {
     "E_L": 0.0,  # mV, leak / resting membrane potential
     "eprop_isi_trace_cutoff": args.cutoff,  # cutoff of integration of eprop trace between spikes
     "I_e": 0.0,  # pA, external current input
-    "regular_spike_arrival": False,  # If True, input spikes arrive at end of time step, if False at beginning
     "tau_m": 100.0,  # ms, membrane time constant
     "V_m": 0.0,  # mV, initial value of the membrane voltage
 }
@@ -235,13 +234,15 @@ params_nrn_rec = {
     "I_e": 0.0,
     "kappa": args.kappa,  # low-pass filter of the eligibility trace
     "kappa_reg": args.kappa_reg,  # low-pass filter of the firing rate for regularization
-    "regular_spike_arrival": True,
     "surrogate_gradient_function": args.surrogate_gradient,  # surrogate gradient / pseudo-derivative function
     "t_ref": 0.0,  # ms, duration of refractory period
     "tau_m": 30.0,
     "V_m": 0.0,
     "V_th": 0.6,  # mV, spike threshold membrane voltage
 }
+
+scale_factor = 1.0 - params_nrn_rec["kappa"]  # factor for rescaling due to removal of irregular spike arrival
+params_nrn_rec["c_reg"] /= scale_factor**2
 
 ####################
 
@@ -355,8 +356,8 @@ dtype_weights = np.float32  # data type of weights - for reproducing TF results 
 weights_in_rec = np.array(np.random.randn(n_in, n_rec).T / np.sqrt(n_in), dtype=dtype_weights)
 weights_rec_rec = np.array(np.random.randn(n_rec, n_rec).T / np.sqrt(n_rec), dtype=dtype_weights)
 np.fill_diagonal(weights_rec_rec, 0.0)  # since no autapses set corresponding weights to zero
-weights_rec_out = np.array(calculate_glorot_dist(n_rec, n_out).T, dtype=dtype_weights)
-weights_out_rec = np.array(np.random.randn(n_rec, n_out), dtype=dtype_weights)
+weights_rec_out = np.array(calculate_glorot_dist(n_rec, n_out).T, dtype=dtype_weights) * scale_factor
+weights_out_rec = np.array(np.random.randn(n_rec, n_out), dtype=dtype_weights) / scale_factor
 
 weights_in_rec *= create_mask(weights_in_rec, 0.75)
 weights_rec_rec *= create_mask(weights_rec_rec, 0.99)
@@ -366,7 +367,7 @@ params_common_syn_eprop = {
     "optimizer": {
         "type": "gradient_descent",  # algorithm to optimize the weights
         "batch_size": 1,
-        "eta": args.eta,  # learning rate
+        "eta": args.eta * scale_factor**2,  # learning rate
         "optimize_each_step": False,  # call optimizer every time step (True) or once per spike (False); both
         # yield same results for gradient descent, False offers speed-up
         "Wmin": -100.0,  # pA, minimal limit of the synaptic weights
@@ -377,7 +378,7 @@ params_common_syn_eprop = {
 if args.record_dynamics:
     params_common_syn_eprop["weight_recorder"] = wr
 
-eta_train = 5e-3
+eta_train = args.eta * scale_factor**2
 eta_test = 0.0
 
 params_syn_base = {
@@ -794,7 +795,6 @@ colors = {
 
 plt.rcParams.update(
     {
-        "font.sans-serif": "Arial",
         "axes.spines.right": False,
         "axes.spines.top": False,
         "axes.prop_cycle": cycler(color=[colors["blue"], colors["red"]]),
@@ -886,7 +886,10 @@ for title, xlims in zip(
 # the first time step and we add the initial weights manually.
 
 
-def plot_weight_time_course(ax, events, nrns_senders, nrns_targets, label, ylabel):
+def plot_weight_time_course(ax, events, nrns_weight_record, label, ylabel):
+    sender_label, target_label = label.split("_")
+    nrns_senders = nrns_weight_record[sender_label]
+    nrns_targets = nrns_weight_record[target_label]
     for sender in nrns_senders.tolist():
         for target in nrns_targets.tolist():
             idc_syn = (events["senders"] == sender) & (events["targets"] == target)
@@ -905,11 +908,15 @@ def plot_weight_time_course(ax, events, nrns_senders, nrns_targets, label, ylabe
 fig, axs = plt.subplots(3, 1, sharex=True, figsize=(3, 4))
 fig.suptitle("Weight time courses")
 
-plot_weight_time_course(axs[0], events_wr, nrns_in[:n_record_w], nrns_rec[:n_record_w], "in_rec", r"$W_\text{in}$ (pA)")
-plot_weight_time_course(
-    axs[1], events_wr, nrns_rec[:n_record_w], nrns_rec[:n_record_w], "rec_rec", r"$W_\text{rec}$ (pA)"
-)
-plot_weight_time_course(axs[2], events_wr, nrns_rec[:n_record_w], nrns_out, "rec_out", r"$W_\text{out}$ (pA)")
+nrns_weight_record = {
+    "in": nrns_in[:n_record_w],
+    "rec": nrns_rec[:n_record_w],
+    "out": nrns_out,
+}
+
+plot_weight_time_course(axs[0], events_wr, nrns_weight_record, "in_rec", r"$W_\text{in}$ (pA)")
+plot_weight_time_course(axs[1], events_wr, nrns_weight_record, "rec_rec", r"$W_\text{rec}$ (pA)")
+plot_weight_time_course(axs[2], events_wr, nrns_weight_record, "rec_out", r"$W_\text{out}$ (pA)")
 
 axs[-1].set_xlabel(r"$t$ (ms)")
 axs[-1].set_xlim(0, steps["task"])
