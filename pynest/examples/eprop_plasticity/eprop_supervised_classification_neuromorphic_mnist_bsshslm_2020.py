@@ -119,6 +119,7 @@ parser.add_argument("--record_dynamics", action=argparse.BooleanOptionalAction, 
 parser.add_argument("--recordings_dir", type=str, default="./")
 parser.add_argument("--reset_neurons", action=argparse.BooleanOptionalAction, default=True)
 parser.add_argument("--seed", type=int, default=1)
+parser.add_argument("--sparsity", action=argparse.BooleanOptionalAction, default=True)
 parser.add_argument("--surrogate_gradient", type=str.lower, default="piecewise_linear")
 parser.add_argument("--surrogate_gradient_beta", type=float, default=1.0)
 parser.add_argument("--surrogate_gradient_gamma", type=float, default=0.3)
@@ -358,9 +359,10 @@ np.fill_diagonal(weights_rec_rec, 0.0)  # since no autapses set corresponding we
 weights_rec_out = np.array(calculate_glorot_dist(n_rec, n_out).T, dtype=dtype_weights)
 weights_out_rec = np.array(np.random.randn(n_rec, n_out), dtype=dtype_weights)
 
-weights_in_rec *= create_mask(weights_in_rec, 0.75)
-weights_rec_rec *= create_mask(weights_rec_rec, 0.99)
-weights_rec_out *= create_mask(weights_rec_out, 0.0)
+if args.sparsity:
+    weights_in_rec *= create_mask(weights_in_rec, 0.75)
+    weights_rec_rec *= create_mask(weights_rec_rec, 0.99)
+    weights_rec_out *= create_mask(weights_rec_out, 0.0)
 
 params_common_syn_eprop = {
     "optimizer": {
