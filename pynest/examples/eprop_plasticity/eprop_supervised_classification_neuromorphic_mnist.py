@@ -124,6 +124,7 @@ parser.add_argument("--sparsity", action=argparse.BooleanOptionalAction, default
 parser.add_argument("--surrogate_gradient", type=str.lower, default="piecewise_linear")
 parser.add_argument("--surrogate_gradient_beta", type=float, default=1.7)
 parser.add_argument("--surrogate_gradient_gamma", type=float, default=0.5)
+parser.add_argument("--neuron_model", type=str.lower, default="eprop_iaf")
 
 args = parser.parse_args()
 
@@ -245,6 +246,11 @@ params_nrn_rec = {
 scale_factor = 1.0 - params_nrn_rec["kappa"]  # factor for rescaling due to removal of irregular spike arrival
 params_nrn_rec["c_reg"] /= scale_factor**2
 
+if args.neuron_model in ["eprop_iaf_psc_delta", "eprop_iaf_psc_delta_adapt"]:
+    params_nrn_rec["V_reset"] = -0.5  # mV, reset membrane voltage
+    params_nrn_rec["c_reg"] = args.c_reg_delta / duration["sequence"] / scale_factor**2
+    params_nrn_rec["V_th"] = 0.5
+
 ####################
 
 # Intermediate parrot neurons required between input spike generators and recurrent neurons,
@@ -253,7 +259,7 @@ params_nrn_rec["c_reg"] /= scale_factor**2
 gen_spk_in = nest.Create("spike_generator", n_in)
 nrns_in = nest.Create("parrot_neuron", n_in)
 
-nrns_rec = nest.Create("eprop_iaf", n_rec, params_nrn_rec)
+nrns_rec = nest.Create(args.neuron_model, n_rec, params_nrn_rec)
 nrns_out = nest.Create("eprop_readout", n_out, params_nrn_out)
 gen_rate_target = nest.Create("step_rate_generator", n_out)
 gen_learning_window = nest.Create("step_rate_generator")
