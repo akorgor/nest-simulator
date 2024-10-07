@@ -164,13 +164,15 @@ class Tools:
             else:
                 df.to_csv(f"{save_file}.csv", index=False)
 
-                condition1 = (df["time_ms"] > 0) & (df["time_ms"] < duration["sequence"] + 50)
-                condition2 = (df["time_ms"] > duration["task"] - duration["sequence"] - 50) & (
-                    df["time_ms"] < duration["task"]
-                )
+                if "task" in duration.keys():
+                    condition1 = df.time_ms > 0
+                    condition2 = df.time_ms < duration["sequence"] + 50
 
-                df_subset = df[condition1 | condition2]
-                df_subset.to_csv(f"{save_file}_subset.csv", index=False)
+                    condition3 = df.time_ms > duration["task"] - duration["sequence"] - 50
+                    condition4 = df.time_ms < duration["task"]
+
+                    df_subset = df[condition1 & condition2 | condition3 & condition4]
+                    df_subset.to_csv(f"{save_file}_subset.csv", index=False)
 
     def process_timing(self, kernel_status):
         timing_dict = {}
