@@ -109,6 +109,7 @@ parser.add_argument("--batch_size", type=int, default=2)
 parser.add_argument("--group_size", type=int, default=2)
 parser.add_argument("--c_reg", type=float, default=2.0)
 parser.add_argument("--cutoff", type=int, default=100)
+parser.add_argument("--dataset_dir", type=str, default="./")
 parser.add_argument("--eta", type=float, default=5e-3)
 parser.add_argument("--kappa", type=float, default=0.99)
 parser.add_argument("--n_iter_train", type=int, default=4)
@@ -211,7 +212,8 @@ nest.set_verbosity("M_FATAL")
 # pixels. By omitting Poisson generators for pixels on this blocklist, we effectively reduce the total number of
 # input neurons and Poisson generators required, optimizing the network's resource usage.
 
-pixels_blocklist = np.loadtxt(f"./NMNIST_pixels_blocklist.txt")
+blocklist_file = os.path.join(args.dataset_dir, "NMNIST_pixels_blocklist.txt")
+pixels_blocklist = np.loadtxt(blocklist_file)
 
 n_in = 2 * 34 * 34 - len(pixels_blocklist)  # number of input neurons
 n_rec = 150  # number of recurrent neurons
@@ -618,7 +620,7 @@ def create_input_output(loader, t_start_iteration, t_end_iteration, target_signa
     return params_gen_spk_in, params_gen_rate_target
 
 
-save_path = "./"  # path to save the N-MNIST dataset to'
+save_path = args.dataset_dir  # path to save the N-MNIST dataset to
 train_path, test_path = download_and_extract_nmnist_dataset(save_path)
 
 selected_labels = [label for label in range(n_out)]
