@@ -143,7 +143,7 @@ class Tools:
                 dfs.append(pd.read_csv(f"{save_file}.csv"))
 
             for fname in file_names:
-                df_new = pd.read_csv(f"{file_names[0]}", skiprows=2, sep="\t")
+                df_new = pd.read_csv(f"{fname}", skiprows=2, sep="\t")
                 if not df_new.empty:
                     dfs.append(df_new)
                 os.remove(fname)
