@@ -424,13 +424,6 @@ params_syn_static = {
     "delay": duration["step"],
 }
 
-params_init_optimizer = {
-    "optimizer": {
-        "m": 0.0,  # initial 1st moment estimate m of Adam optimizer
-        "v": 0.0,  # initial 2nd moment raw estimate v of Adam optimizer
-    }
-}
-
 ####################
 
 nest.SetDefaults("eprop_synapse", params_common_syn_eprop)
@@ -472,11 +465,6 @@ tools.constrain_weights(
     params_syn_base,
     params_common_syn_eprop,
 )
-
-# After creating the connections, we can individually initialize the optimizer's
-# dynamic variables for single synapses (here exemplarily for two connections).
-
-nest.GetConnections(nrns_rec[0], nrns_rec[1:3]).set([params_init_optimizer] * 2)
 
 # %% ###########################################################################################################
 # Create input and output
