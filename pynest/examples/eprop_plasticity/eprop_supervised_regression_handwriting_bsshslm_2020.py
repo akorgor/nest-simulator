@@ -118,6 +118,7 @@ parser.add_argument("--apply_dales_law", type=str.lower, nargs="*", default=[])
 parser.add_argument("--average_gradient", type=bool, default=False)
 parser.add_argument("--batch_size", type=int, default=1)
 parser.add_argument("--c_reg", type=float, default=150.0)
+parser.add_argument("--dataset_dir", type=str, default="./")
 parser.add_argument("--eta", type=float, default=5e-3)
 parser.add_argument("--loss", type=str, default="mean_squared_error")
 parser.add_argument("--n_iter", type=int, default=5)
@@ -153,7 +154,7 @@ np.random.seed(rng_seed)  # fix numpy random seed
 batch_size = args.batch_size  # batch size
 n_iter = args.n_iter  # number of iterations, 5000 to reach convergence as in the figure
 
-data_file_name = "chaos_handwriting.txt"  # name of file with task data
+data_file_name = f"{args.dataset_dir}/chaos_handwriting.txt"  # name of file with task data
 data = np.loadtxt(data_file_name)
 
 steps = {
@@ -302,7 +303,7 @@ params_mm_rec = {
 
 params_mm_out = {
     "interval": duration["step"],
-    "record_from": ["V_m", "readout_signal", "readout_signal_unnorm", "target_signal", "error_signal"],
+    "record_from": ["readout_signal", "target_signal"],
     "start": duration["total_offset"],
     "stop": duration["total_offset"] + duration["task"],
     "label": "multimeter_out",
@@ -333,13 +334,15 @@ for params in [params_mm_rec, params_mm_out, params_wr, params_sr_in, params_sr_
 
 ####################
 
-mm_out = nest.Create("multimeter", params_mm_out)
-
 if args.record_dynamics:
+    params_mm_out["record_from"] += ["V_m", "readout_signal_unnorm", "error_signal"]
+
     mm_rec = nest.Create("multimeter", params_mm_rec)
     sr_in = nest.Create("spike_recorder", params_sr_in)
     sr_rec = nest.Create("spike_recorder", params_sr_rec)
     wr = nest.Create("weight_recorder", params_wr)
+
+mm_out = nest.Create("multimeter", params_mm_out)
 
 nrns_rec_record = nrns_rec[:n_record]
 

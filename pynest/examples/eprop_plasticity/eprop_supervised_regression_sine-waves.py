@@ -119,7 +119,7 @@ parser.add_argument("--seed", type=int, default=1)
 parser.add_argument("--surrogate_gradient", type=str.lower, default="piecewise_linear")
 parser.add_argument("--surrogate_gradient_beta", type=float, default=33.3)
 parser.add_argument("--surrogate_gradient_gamma", type=float, default=10.0)
-parser.add_argument("--neuron_model", type=str.lower, default="eprop_iaf")
+parser.add_argument("--model_nrn_rec", type=str.lower, default="eprop_iaf")
 
 args = parser.parse_args()
 
@@ -202,7 +202,7 @@ n_in = 100  # number of input neurons
 n_rec = 100  # number of recurrent neurons
 n_out = 1  # number of readout neurons
 
-model_nrn_rec = args.neuron_model
+model_nrn_rec = args.model_nrn_rec
 
 params_nrn_out = {
     "C_m": 1.0,  # pF, membrane capacitance - takes effect only if neurons get current input (here not the case)
@@ -279,7 +279,7 @@ params_mm_rec = {
 
 params_mm_out = {
     "interval": duration["step"],
-    "record_from": ["V_m", "readout_signal", "target_signal", "error_signal"],
+    "record_from": ["readout_signal"],
     "start": duration["total_offset"],
     "stop": duration["total_offset"] + duration["task"],
     "label": "multimeter_out",
@@ -310,12 +310,15 @@ for params in [params_mm_rec, params_mm_out, params_wr, params_sr_in, params_sr_
 
 ####################
 
-mm_out = nest.Create("multimeter", params_mm_out)
 if args.record_dynamics:
+    params_mm_out["record_from"] += ["V_m", "target_signal", "error_signal"]
+
     mm_rec = nest.Create("multimeter", params_mm_rec)
     sr_in = nest.Create("spike_recorder", params_sr_in)
     sr_rec = nest.Create("spike_recorder", params_sr_rec)
     wr = nest.Create("weight_recorder", params_wr)
+
+mm_out = nest.Create("multimeter", params_mm_out)
 
 nrns_rec_record = nrns_rec[:n_record]
 
