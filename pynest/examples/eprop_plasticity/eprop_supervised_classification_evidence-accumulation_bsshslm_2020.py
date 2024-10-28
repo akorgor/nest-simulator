@@ -113,7 +113,8 @@ parser.add_argument("--batch_size", type=int, default=1)
 parser.add_argument("--c_reg", type=float, default=300.0)
 parser.add_argument("--eta", type=float, default=5e-3)
 parser.add_argument("--loss", type=str, default="cross_entropy")
-parser.add_argument("--n_iter", type=int, default=5)
+parser.add_argument("--n_iter_train", type=int, default=4)
+parser.add_argument("--n_iter_test", type=int, default=1)
 parser.add_argument("--nvp", type=int, default=1)
 parser.add_argument("--prevent_weight_sign_change", type=str.lower, nargs="*", default=[])
 parser.add_argument("--record_dynamics", action=argparse.BooleanOptionalAction, default=True)
@@ -149,8 +150,8 @@ np.random.seed(rng_seed)  # fix numpy random seed
 # stop criterion is reached. After training, the performance can be tested over a number of test iterations.
 
 batch_size = args.batch_size  # batch size, 64 in reference [2], 32 in the README to reference [2]
-n_iter_train = args.n_iter  # number of training iterations, 2000 in reference [2]
-n_iter_test = 4  # number of iterations for final test
+n_iter_train = args.n_iter_train  # number of training iterations, 2000 in reference [2]
+n_iter_test = args.n_iter_test  # number of iterations for final test
 do_early_stopping = args.do_early_stopping  # if True, stop training as soon as stop criterion fulfilled
 n_iter_validate_every = 10  # number of training iterations before validation
 n_iter_early_stop = 8  # number of iterations to average over to evaluate early stopping condition
@@ -335,7 +336,7 @@ params_mm_ad = {
 
 params_mm_out = {
     "interval": duration["step"],
-    "record_from": ["V_m", "readout_signal", "readout_signal_unnorm", "target_signal", "error_signal"],
+    "record_from": ["readout_signal", "target_signal"],
     "start": duration["total_offset"],
     "label": "multimeter_out",
 }
@@ -367,15 +368,17 @@ for params in [params_mm_reg, params_mm_ad, params_mm_out, params_wr, params_sr_
 
 ####################
 
-mm_out = nest.Create("multimeter", params_mm_out)
-
 if args.record_dynamics:
+    params_mm_out["record_from"] += ["V_m", "readout_signal_unnorm", "error_signal"]
+
     mm_reg = nest.Create("multimeter", params_mm_reg)
     mm_ad = nest.Create("multimeter", params_mm_ad)
     sr_in = nest.Create("spike_recorder", params_sr_in)
     sr_reg = nest.Create("spike_recorder", params_sr_reg)
     sr_ad = nest.Create("spike_recorder", params_sr_ad)
     wr = nest.Create("weight_recorder", params_wr)
+
+mm_out = nest.Create("multimeter", params_mm_out)
 
 nrns_reg_record = nrns_reg[:n_record]
 nrns_ad_record = nrns_ad[:n_record]

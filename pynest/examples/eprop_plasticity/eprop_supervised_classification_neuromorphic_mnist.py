@@ -126,7 +126,8 @@ parser.add_argument("--sparsity", action=argparse.BooleanOptionalAction, default
 parser.add_argument("--surrogate_gradient", type=str.lower, default="piecewise_linear")
 parser.add_argument("--surrogate_gradient_beta", type=float, default=1.7)
 parser.add_argument("--surrogate_gradient_gamma", type=float, default=0.5)
-parser.add_argument("--neuron_model", type=str.lower, default="eprop_iaf")
+parser.add_argument("--model_nrn_rec", type=str.lower, default="eprop_iaf")
+parser.add_argument("--do_early_stopping", action=argparse.BooleanOptionalAction, default=False)
 
 args = parser.parse_args()
 
@@ -156,7 +157,7 @@ np.random.seed(rng_seed)  # fix numpy random seed
 group_size = args.group_size  # number of instances over which to evaluate the learning performance, 100 for convergence
 n_iter_train = args.n_iter_train  # number of training iterations, 200 for convergence
 n_iter_test = args.n_iter_test  # number of iterations for final test
-do_early_stopping = False  # if True, stop training as soon as stop criterion fulfilled
+do_early_stopping = args.do_early_stopping  # if True, stop training as soon as stop criterion fulfilled
 n_iter_validate_every = 10  # number of training iterations before validation
 n_iter_early_stop = 8  # number of iterations to average over to evaluate early stopping condition
 stop_crit = 0.07  # error value corresponding to stop criterion for early stopping
@@ -260,10 +261,10 @@ params_nrn_rec = {
 scale_factor = 1.0 - params_nrn_rec["kappa"]  # factor for rescaling due to removal of irregular spike arrival
 params_nrn_rec["c_reg"] /= scale_factor**2
 
-if args.neuron_model == "eprop_iaf_adapt":
+if args.model_nrn_rec == "eprop_iaf_adapt":
     params_nrn_rec["adapt_beta"] = 0.0  # adaptation scaling
 
-if args.neuron_model in ["eprop_iaf_psc_delta", "eprop_iaf_psc_delta_adapt"]:
+if args.model_nrn_rec in ["eprop_iaf_psc_delta", "eprop_iaf_psc_delta_adapt"]:
     params_nrn_rec["V_reset"] = -0.5  # mV, reset membrane voltage
     params_nrn_rec["c_reg"] = args.c_reg_delta / duration["sequence"] / scale_factor**2
     params_nrn_rec["V_th"] = 0.5
@@ -276,7 +277,7 @@ if args.neuron_model in ["eprop_iaf_psc_delta", "eprop_iaf_psc_delta_adapt"]:
 gen_spk_in = nest.Create("spike_generator", n_in)
 nrns_in = nest.Create("parrot_neuron", n_in)
 
-nrns_rec = nest.Create(args.neuron_model, n_rec, params_nrn_rec)
+nrns_rec = nest.Create(args.model_nrn_rec, n_rec, params_nrn_rec)
 nrns_out = nest.Create("eprop_readout", n_out, params_nrn_out)
 gen_rate_target = nest.Create("step_rate_generator", n_out)
 gen_learning_window = nest.Create("step_rate_generator")
@@ -305,7 +306,7 @@ params_mm_rec = {
 
 params_mm_out = {
     "interval": duration["step"],
-    "record_from": ["V_m", "readout_signal", "target_signal", "error_signal"],
+    "record_from": ["readout_signal", "target_signal"],
     "start": duration["total_offset"],
     "label": "multimeter_out",
 }
@@ -332,13 +333,15 @@ for params in [params_mm_rec, params_mm_out, params_wr, params_sr_in, params_sr_
 
 ####################
 
-mm_out = nest.Create("multimeter", params_mm_out)
-
 if args.record_dynamics:
+    params_mm_out["record_from"] += ["V_m", "error_signal"]
+
     mm_rec = nest.Create("multimeter", params_mm_rec)
     sr_in = nest.Create("spike_recorder", params_sr_in)
     sr_rec = nest.Create("spike_recorder", params_sr_rec)
     wr = nest.Create("weight_recorder", params_wr)
+
+mm_out = nest.Create("multimeter", params_mm_out)
 
 nrns_rec_record = nrns_rec[:n_record]
 

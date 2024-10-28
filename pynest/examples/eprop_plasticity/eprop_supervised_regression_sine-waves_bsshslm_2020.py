@@ -271,7 +271,7 @@ params_mm_rec = {
 
 params_mm_out = {
     "interval": duration["step"],
-    "record_from": ["V_m", "readout_signal", "readout_signal_unnorm", "target_signal", "error_signal"],
+    "record_from": ["readout_signal", "target_signal"],
     "start": duration["total_offset"],
     "stop": duration["total_offset"] + duration["task"],
     "label": "multimeter_out",
@@ -302,13 +302,15 @@ for params in [params_mm_rec, params_mm_out, params_wr, params_sr_in, params_sr_
 
 ####################
 
-mm_out = nest.Create("multimeter", params_mm_out)
-
 if args.record_dynamics:
+    params_mm_out["record_from"] += ["V_m", "readout_signal_unnorm", "error_signal"]
+
     mm_rec = nest.Create("multimeter", params_mm_rec)
     sr_in = nest.Create("spike_recorder", params_sr_in)
     sr_rec = nest.Create("spike_recorder", params_sr_rec)
     wr = nest.Create("weight_recorder", params_wr)
+
+mm_out = nest.Create("multimeter", params_mm_out)
 
 nrns_rec_record = nrns_rec[:n_record]
 

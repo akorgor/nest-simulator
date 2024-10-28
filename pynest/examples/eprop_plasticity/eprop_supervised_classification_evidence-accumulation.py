@@ -108,13 +108,14 @@ except Exception:
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--apply_dales_law", type=str.lower, nargs="*", default=[])
-parser.add_argument("--batch_size", type=int, default=1)
 parser.add_argument("--c_reg", type=float, default=300.0)
 parser.add_argument("--cutoff", type=int, default=100)
 parser.add_argument("--eta", type=float, default=5e-3)
+parser.add_argument("--group_size", type=int, default=1)
 parser.add_argument("--kappa", type=float, default=0.95)
 parser.add_argument("--kappa_reg", type=float, default=0.95)
-parser.add_argument("--n_iter", type=int, default=5)
+parser.add_argument("--n_iter_train", type=int, default=5)
+parser.add_argument("--n_iter_test", type=int, default=0)
 parser.add_argument("--nvp", type=int, default=1)
 parser.add_argument("--prevent_weight_sign_change", type=str.lower, nargs="*", default=[])
 parser.add_argument("--record_dynamics", action=argparse.BooleanOptionalAction, default=True)
@@ -123,6 +124,8 @@ parser.add_argument("--seed", type=int, default=1)
 parser.add_argument("--surrogate_gradient", type=str.lower, default="piecewise_linear")
 parser.add_argument("--surrogate_gradient_beta", type=float, default=1.7)
 parser.add_argument("--surrogate_gradient_gamma", type=float, default=0.5)
+parser.add_argument("--model_nrn_rec", type=str.lower, default="eprop_iaf")
+parser.add_argument("--do_early_stopping", action=argparse.BooleanOptionalAction, default=False)
 
 args = parser.parse_args()
 
@@ -149,10 +152,10 @@ np.random.seed(rng_seed)  # fix numpy random seed
 # classification error is tested in regular intervals and the training stopped as soon as the error selected as
 # stop criterion is reached. After training, the performance can be tested over a number of test iterations.
 
-group_size = args.batch_size  # number of instances over which to evaluate the learning performance
-n_iter_train = args.n_iter  # number of training iterations, 2000 in reference [2]
-n_iter_test = 4  # number of iterations for final test
-do_early_stopping = True  # if True, stop training as soon as stop criterion fulfilled
+group_size = args.group_size  # number of instances over which to evaluate the learning performance
+n_iter_train = args.n_iter_train  # number of training iterations, 2000 in reference [2]
+n_iter_test = args.n_iter_test  # number of iterations for final test
+do_early_stopping = args.do_early_stopping  # if True, stop training as soon as stop criterion fulfilled
 n_iter_validate_every = 10  # number of training iterations before validation
 n_iter_early_stop = 8  # number of iterations to average over to evaluate early stopping condition
 stop_crit = 0.07  # error value corresponding to stop criterion for early stopping
@@ -331,7 +334,7 @@ params_mm_ad = {
 
 params_mm_out = {
     "interval": duration["step"],
-    "record_from": ["V_m", "readout_signal", "target_signal", "error_signal"],
+    "record_from": ["readout_signal", "target_signal"],
     "start": duration["total_offset"],
     "label": "multimeter_out",
 }
@@ -363,15 +366,17 @@ for params in [params_mm_reg, params_mm_ad, params_mm_out, params_wr, params_sr_
 
 ####################
 
-mm_out = nest.Create("multimeter", params_mm_out)
-
 if args.record_dynamics:
+    params_mm_out["record_from"] += ["V_m", "error_signal"]
+
     mm_reg = nest.Create("multimeter", params_mm_reg)
     mm_ad = nest.Create("multimeter", params_mm_ad)
     sr_in = nest.Create("spike_recorder", params_sr_in)
     sr_reg = nest.Create("spike_recorder", params_sr_reg)
     sr_ad = nest.Create("spike_recorder", params_sr_ad)
     wr = nest.Create("weight_recorder", params_wr)
+
+mm_out = nest.Create("multimeter", params_mm_out)
 
 nrns_reg_record = nrns_reg[:n_record]
 nrns_ad_record = nrns_ad[:n_record]

@@ -165,13 +165,13 @@ class Tools:
                 df.to_csv(f"{save_file}.csv", index=False)
 
                 if "task" in duration.keys():
-                    condition1 = df.time_ms > 0
-                    condition2 = df.time_ms < duration["sequence"] + 50
+                    t_margin = 50.0  # ms, record a bit into the next / previous iteration
 
-                    condition3 = df.time_ms > duration["task"] - duration["sequence"] - 50
-                    condition4 = df.time_ms < duration["task"]
+                    condition_first_iteration = df.time_ms < duration["sequence"] + t_margin
 
-                    df_subset = df[condition1 & condition2 | condition3 & condition4]
+                    condition_last_iteration = df.time_ms >= duration["task"] - duration["sequence"] - t_margin
+
+                    df_subset = df[condition_first_iteration | condition_last_iteration]
                     df_subset.to_csv(f"{save_file}_subset.csv", index=False)
 
     def process_timing(self, kernel_status):
@@ -236,19 +236,19 @@ class Tools:
             ]
         elif file_name == "eprop_supervised_classification_neuromorphic_mnist.py":
             loss_reference = [
-                0.49294941622117,
-                0.50093180588764,
-                0.50547145658547,
-                0.49757519264277,
-                0.51113387822535,
+                0.48418409995835,
+                0.50774603066254,
+                0.50747704606646,
+                0.49662275495181,
+                0.45960320967891,
             ]
         elif file_name == "eprop_supervised_classification_neuromorphic_mnist_bsshslm_2020.py":
             loss_reference = [
-                2.29149289312312,
-                2.30804065748563,
-                2.29144967470845,
-                2.29663375220343,
-                2.31433809667931,
+                2.28729399478664,
+                2.31292443740832,
+                2.30693533549074,
+                2.29826184474845,
+                2.27345811035748,
             ]
         elif file_name == "eprop_supervised_regression_lemniscate_bsshslm_2020.py":
             loss_reference = [
@@ -271,8 +271,15 @@ class Tools:
         verification_successful = np.allclose(self.loss[:n_compare], loss_reference[:n_compare], atol=1e-14)
 
         if not verification_successful:
-            for l, lr in zip(self.loss[:n_compare], loss_reference[:n_compare]):
+            print("loss:")
+            for l in self.loss[:n_compare]:
                 print(f"    {l:.14f},")
-                print(f"    {lr:.14f},")
-                print(" ")
+
+            print("\nreference loss:")
+            for l in loss_reference[:n_compare]:
+                print(f"    {l:.14f},")
+
+            print("\nloss - reference loss:")
+            for l, lr in zip(self.loss[:n_compare], loss_reference[:n_compare]):
+                print(f"    {l-lr:.14f},")
         print(verification_successful)
