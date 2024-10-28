@@ -115,7 +115,7 @@ except Exception:
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--apply_dales_law", type=str.lower, nargs="*", default=[])
-parser.add_argument("--average_gradient", type=bool, default=False)
+parser.add_argument("--average_gradient", action=argparse.BooleanOptionalAction, default=False)
 parser.add_argument("--batch_size", type=int, default=1)
 parser.add_argument("--c_reg", type=float, default=150.0)
 parser.add_argument("--dataset_dir", type=str, default="./")
