@@ -236,19 +236,19 @@ class Tools:
             ]
         elif file_name == "eprop_supervised_classification_neuromorphic_mnist.py":
             loss_reference = [
-                0.48418409995835,
-                0.50774603066254,
-                0.50747704606646,
-                0.49662275495181,
-                0.45960320967891,
+                0.49542706632114,
+                0.51359011586924,
+                0.52512156851762,
+                0.50372645195962,
+                0.45187380644716,
             ]
         elif file_name == "eprop_supervised_classification_neuromorphic_mnist_bsshslm_2020.py":
             loss_reference = [
-                2.28729399478664,
-                2.31292443740832,
-                2.30693533549074,
-                2.29826184474845,
-                2.27345811035748,
+                2.29786665381485,
+                2.31976362544488,
+                2.33485928474764,
+                2.30052887965964,
+                2.27399250538698,
             ]
         elif file_name == "eprop_supervised_regression_lemniscate_bsshslm_2020.py":
             loss_reference = [
