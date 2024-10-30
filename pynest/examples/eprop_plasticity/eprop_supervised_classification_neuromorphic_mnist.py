@@ -370,17 +370,6 @@ def calculate_glorot_dist(fan_in, fan_out):
     return glorot_distribution
 
 
-def create_mask(weights, sparsity_level):
-    return np.random.choice([0, 1], weights.shape, p=[sparsity_level, 1 - sparsity_level])
-
-
-def get_weight_recorder_senders_targets(weights, sender_pop, target_pop):
-    target_idc, sender_idc = np.where(weights)
-    senders = sender_pop[np.unique(sender_idc[:n_record_w])]
-    targets = target_pop[np.unique(target_idc[:n_record_w])]
-    return senders, targets
-
-
 weights_in_rec = np.array(np.random.randn(n_in, n_rec).T / np.sqrt(n_in))
 weights_rec_rec = np.array(np.random.randn(n_rec, n_rec).T / np.sqrt(n_rec))
 np.fill_diagonal(weights_rec_rec, 0.0)  # since no autapses set corresponding weights to zero
@@ -388,6 +377,16 @@ weights_rec_out = np.array(calculate_glorot_dist(n_rec, n_out).T) * scale_factor
 weights_out_rec = np.array(np.random.randn(n_rec, n_out)) / scale_factor
 
 if args.sparsity:
+
+    def create_mask(weights, sparsity_level):
+        return np.random.choice([0, 1], weights.shape, p=[sparsity_level, 1 - sparsity_level])
+
+    def get_weight_recorder_senders_targets(weights, sender_pop, target_pop):
+        target_idc, sender_idc = np.where(weights)
+        senders = sender_pop[np.unique(sender_idc[:n_record_w])]
+        targets = target_pop[np.unique(target_idc[:n_record_w])]
+        return senders, targets
+
     sparsity_level_in_rec = 0.75
     sparsity_level_rec_rec = 0.99
     sparsity_level_rec_out = 0.0
@@ -460,19 +459,23 @@ nest.SetDefaults("eprop_synapse", params_common_syn_eprop)
 
 nest.Connect(gen_spk_in, nrns_in, params_conn_one_to_one, params_syn_static)  # connection 1
 
+if args.sparsity:
 
-def sparsely_connect(weights, params_syn, nrns_pre, nrns_post):
-    targets, sources = np.where(weights)
-    params_syn["weight"] = weights[targets, sources].flatten()
-    params_syn["delay"] = [params_syn["delay"] for _ in params_syn["weight"]]
-    nrns_pre_arr = np.array(nrns_pre.tolist())
-    nrns_post_arr = np.array(nrns_post.tolist())
-    nest.Connect(nrns_pre_arr[sources], nrns_post_arr[targets], params_conn_one_to_one, params_syn)
+    def sparsely_connect(weights, params_syn, nrns_pre, nrns_post):
+        targets, sources = np.where(weights)
+        params_syn["weight"] = weights[targets, sources].flatten()
+        params_syn["delay"] = [params_syn["delay"] for _ in params_syn["weight"]]
+        nrns_pre_arr = np.array(nrns_pre.tolist())
+        nrns_post_arr = np.array(nrns_post.tolist())
+        nest.Connect(nrns_pre_arr[sources], nrns_post_arr[targets], params_conn_one_to_one, params_syn)
 
-
-sparsely_connect(weights_in_rec, params_syn_in, nrns_in, nrns_rec)  # connection 2
-sparsely_connect(weights_rec_rec, params_syn_rec, nrns_rec, nrns_rec)  # connection 3
-sparsely_connect(weights_rec_out, params_syn_out, nrns_rec, nrns_out)  # connection 4
+    sparsely_connect(weights_in_rec, params_syn_in, nrns_in, nrns_rec)  # connection 2
+    sparsely_connect(weights_rec_rec, params_syn_rec, nrns_rec, nrns_rec)  # connection 3
+    sparsely_connect(weights_rec_out, params_syn_out, nrns_rec, nrns_out)  # connection 4
+else:
+    nest.Connect(nrns_in, nrns_rec, params_conn_all_to_all, params_syn_in)  # connection 2
+    nest.Connect(nrns_rec, nrns_rec, params_conn_all_to_all, params_syn_rec)  # connection 3
+    nest.Connect(nrns_rec, nrns_out, params_conn_all_to_all, params_syn_out)  # connection 4
 
 nest.Connect(nrns_out, nrns_rec, params_conn_all_to_all, params_syn_feedback)  # connection 5
 nest.Connect(gen_rate_target, nrns_out, params_conn_one_to_one, params_syn_rate_target)  # connection 6
