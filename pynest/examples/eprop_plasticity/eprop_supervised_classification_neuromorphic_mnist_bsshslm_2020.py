@@ -788,7 +788,7 @@ class TrainingPipeline:
 
     def simulate(self, k):
         nest.Simulate(duration[k])
-        tools.process_recordings(duration, nrns_in, nrns_rec, nrns_out)
+        tools.process_recordings(duration, nrns_in, nrns_rec, nrns_out, nest.GetKernelStatus())
 
     def run(self):
         while self.k_iter < n_iter_train and not self.early_stop:
@@ -841,7 +841,6 @@ if args.record_dynamics:
 
 if args.record_dynamics:
     tools.save_weights_snapshots(weights_pre_train, weights_post_train)
-tools.process_timing(nest.GetKernelStatus())
 
 events_mm_out = tools.get_events("multimeter_out")
 

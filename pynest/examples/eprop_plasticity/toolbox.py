@@ -9,13 +9,16 @@ import pandas as pd
 
 class Tools:
     def __init__(self, parser):
-        self.timing = []
         self.parser = parser
         self.args = parser.parse_args()
         self.remove_recordings()
-
-    def time(self):
-        self.timing.append(time.time())
+        self.timing_dict = {
+            "biological_time": [],
+            "time_communicate_prepare": [],
+            "time_construction_connect": [],
+            "time_construction_create": [],
+            "time_simulate": [],
+        }
 
     def remove_recordings(self):
         for file in os.listdir(self.args.recordings_dir):
@@ -121,7 +124,13 @@ class Tools:
             label = f"_{label}"
         df_sub.to_csv(f"{self.args.recordings_dir}/{recorder_label}{label}.csv", index=False)
 
-    def process_recordings(self, duration, nrns_in, nrns_rec, nrns_out):
+    def process_recordings(self, duration, nrns_in, nrns_rec, nrns_out, kernel_status):
+        for k in self.timing_dict.keys():
+            v = kernel_status[k]
+            if k != "biological_time":
+                v *= 1000.0  # convert from s to ms - the unit of biological_time
+            self.timing_dict[k].append(v)
+
         recorder_labels = ["multimeter_out"]
         if self.args.record_dynamics:
             recorder_labels += ["spike_recorder_in", "weight_recorder"]
@@ -174,13 +183,6 @@ class Tools:
                     df_subset = df[condition_first_iteration | condition_last_iteration]
                     df_subset.to_csv(f"{save_file}_subset.csv", index=False)
 
-    def process_timing(self, kernel_status):
-        timing_dict = {}
-        for k, v in kernel_status.items():
-            if k.startswith("time") or k == "biological_time":
-                timing_dict[k] = v
-        pd.DataFrame([timing_dict]).to_csv(f"{self.args.recordings_dir}/timing.csv", index=False)
-
     def get_events(self, label):
         df = pd.read_csv(f"{self.args.recordings_dir}/{label}.csv")
 
@@ -195,6 +197,11 @@ class Tools:
         return events
 
     def save_performance(self, performance_dict):
+        header = [f"{col}_ms" for col in self.timing_dict.keys()]
+        pd.DataFrame.from_dict(self.timing_dict).to_csv(
+            f"{self.args.recordings_dir}/timing.csv", index=False, header=header
+        )
+
         self.loss = performance_dict["loss"]
         pd.DataFrame.from_dict(performance_dict).to_csv(
             f"{self.args.recordings_dir}/learning_performance.csv", index=False
