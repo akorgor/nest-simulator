@@ -108,12 +108,12 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument("--apply_dales_law", type=str.lower, nargs="*", default=[])
 parser.add_argument("--c_reg", type=float, default=2.0)
-parser.add_argument("--c_reg_delta", type=float, default=2.0)
+parser.add_argument("--c_reg_delta", type=float, default=100.0)
 parser.add_argument("--cutoff", type=int, default=100)
 parser.add_argument("--dataset_dir", type=str, default="./")
 parser.add_argument("--eta", type=float, default=5e-3)
 parser.add_argument("--group_size", type=int, default=1)
-parser.add_argument("--kappa", type=float, default=0.99)
+parser.add_argument("--kappa", type=float, default=0.97)
 parser.add_argument("--kappa_reg", type=float, default=0.99)
 parser.add_argument("--n_iter_train", type=int, default=5)
 parser.add_argument("--n_iter_test", type=int, default=0)
@@ -253,7 +253,7 @@ params_nrn_rec = {
     "kappa_reg": args.kappa_reg,  # low-pass filter of the firing rate for regularization
     "surrogate_gradient_function": args.surrogate_gradient,  # surrogate gradient / pseudo-derivative function
     "t_ref": 0.0,  # ms, duration of refractory period
-    "tau_m": 30.0,
+    "tau_m": 10.0,
     "V_m": 0.0,
     "V_th": 0.6,  # mV, spike threshold membrane voltage
 }

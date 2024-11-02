@@ -108,7 +108,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--apply_dales_law", type=str.lower, nargs="*", default=[])
 parser.add_argument("--average_gradient", action=argparse.BooleanOptionalAction, default=False)
 parser.add_argument("--batch_size", type=int, default=1)
-parser.add_argument("--c_reg", type=float, default=2.0)
+parser.add_argument("--c_reg", type=float, default=50.0)
 parser.add_argument("--dataset_dir", type=str, default="./")
 parser.add_argument("--eta", type=float, default=5e-3)
 parser.add_argument("--loss", type=str, default="cross_entropy")
@@ -237,7 +237,7 @@ params_nrn_out = {
     "I_e": 0.0,  # pA, external current input
     "loss": args.loss,  # loss function
     "regular_spike_arrival": False,  # If True, input spikes arrive at end of time step, if False at beginning
-    "tau_m": 100.0,  # ms, membrane time constant
+    "tau_m": 80.0,  # ms, membrane time constant
     "V_m": 0.0,  # mV, initial value of the membrane voltage
 }
 
@@ -252,7 +252,7 @@ params_nrn_rec = {
     "regular_spike_arrival": True,
     "surrogate_gradient_function": args.surrogate_gradient,  # surrogate gradient / pseudo-derivative function
     "t_ref": 0.0,  # ms, duration of refractory period
-    "tau_m": 30.0,
+    "tau_m": 10.0,
     "V_m": 0.0,
     "V_th": 0.6,  # mV, spike threshold membrane voltage
 }
