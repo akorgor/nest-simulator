@@ -567,7 +567,8 @@ if args.record_dynamics:
 
 if args.record_dynamics:
     tools.save_weights_snapshots(weights_pre_train, weights_post_train)
-tools.process_recordings(duration, nrns_in, nrns_rec, nrns_out, nest.GetKernelStatus())
+tools.process_recordings(duration, nrns_in, nrns_rec, nrns_out)
+tools.process_timing(nest.GetKernelStatus())
 
 events_mm_out = tools.get_events("multimeter_out")
 

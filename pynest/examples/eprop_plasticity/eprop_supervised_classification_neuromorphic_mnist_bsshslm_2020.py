@@ -788,7 +788,8 @@ class TrainingPipeline:
 
     def simulate(self, k):
         nest.Simulate(duration[k])
-        tools.process_recordings(duration, nrns_in, nrns_rec, nrns_out, nest.GetKernelStatus())
+        tools.process_recordings(duration, nrns_in, nrns_rec, nrns_out)
+        tools.process_timing(nest.GetKernelStatus())
 
     def run(self):
         while self.k_iter < n_iter_train and not self.early_stop:
