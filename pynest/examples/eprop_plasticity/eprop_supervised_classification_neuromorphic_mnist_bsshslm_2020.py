@@ -108,6 +108,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--apply_dales_law", type=str.lower, nargs="*", default=[])
 parser.add_argument("--average_gradient", action=argparse.BooleanOptionalAction, default=False)
 parser.add_argument("--batch_size", type=int, default=1)
+parser.add_argument("--group_size", type=int, default=1)
 parser.add_argument("--c_reg", type=float, default=50.0)
 parser.add_argument("--dataset_dir", type=str, default="./")
 parser.add_argument("--eta", type=float, default=5e-3)
@@ -149,7 +150,8 @@ np.random.seed(rng_seed)  # fix numpy random seed
 # classification error is tested in regular intervals and the training stopped as soon as the error selected as
 # stop criterion is reached. After training, the performance can be tested over a number of test iterations.
 
-batch_size = args.batch_size  # batch size, 100 for convergence
+batch_size = args.batch_size
+group_size = args.group_size  # batch size, 100 for convergence
 n_iter_train = args.n_iter_train  # number of training iterations, 200 for convergence
 n_iter_test = args.n_iter_test  # number of iterations for final test
 do_early_stopping = args.do_early_stopping  # if True, stop training as soon as stop criterion fulfilled
@@ -569,10 +571,10 @@ def load_image(file_path, pixels_dict):
 
 
 class DataLoader:
-    def __init__(self, path, selected_labels, batch_size, pixels_dict):
+    def __init__(self, path, selected_labels, group_size, pixels_dict):
         self.path = path
         self.selected_labels = selected_labels
-        self.batch_size = batch_size
+        self.group_size = group_size
         self.pixels_dict = pixels_dict
 
         self.current_index = 0
@@ -595,11 +597,11 @@ class DataLoader:
         return all_sample_paths, all_labels
 
     def get_new_evaluation_batch(self):
-        end_index = self.current_index + self.batch_size
+        end_index = self.current_index + self.group_size
 
         selected_indices = np.take(self.shuffled_indices, range(self.current_index, end_index), mode="wrap")
 
-        self.current_index = (self.current_index + self.batch_size) % self.n_all_samples
+        self.current_index = (self.current_index + self.group_size) % self.n_all_samples
 
         images_group = [load_image(self.all_sample_paths[i], self.pixels_dict) for i in selected_indices]
         labels_group = [self.all_labels[i] for i in selected_indices]
@@ -612,19 +614,19 @@ def get_params_task_input_output(n_iter_interval, loader):
 
     spike_times = [[] for _ in range(n_in)]
 
-    iteration_offset = n_iter_interval * batch_size * duration["sequence"]
+    iteration_offset = n_iter_interval * group_size * duration["sequence"]
 
     params_gen_rate_target = [
         {
-            "amplitude_times": np.arange(0.0, batch_size * duration["sequence"], duration["sequence"])
+            "amplitude_times": np.arange(0.0, group_size * duration["sequence"], duration["sequence"])
             + iteration_offset
             + duration["total_offset"],
-            "amplitude_values": np.zeros(batch_size),
+            "amplitude_values": np.zeros(group_size),
         }
         for _ in range(n_out)
     ]
 
-    for batch_element in range(batch_size):
+    for batch_element in range(group_size):
         params_gen_rate_target[target_batch[batch_element]]["amplitude_values"][batch_element] = 1.0
 
         for n, relative_times in enumerate(input_batch[batch_element]):
@@ -643,8 +645,8 @@ train_path, test_path = download_and_extract_nmnist_dataset(save_path)
 
 selected_labels = [label for label in range(n_out)]
 
-data_loader_train = DataLoader(train_path, selected_labels, batch_size, pixels_dict)
-data_loader_test = DataLoader(test_path, selected_labels, batch_size, pixels_dict)
+data_loader_train = DataLoader(train_path, selected_labels, group_size, pixels_dict)
+data_loader_test = DataLoader(test_path, selected_labels, group_size, pixels_dict)
 
 # %% ###########################################################################################################
 # Force final update
@@ -717,15 +719,15 @@ class TrainingPipeline:
         senders = events_mm_out["senders"]
         times = events_mm_out["times"]
 
-        cond1 = times > (self.n_iter_sim - n_iteration) * batch_size * duration["sequence"] + duration["total_offset"]
-        cond2 = times <= self.n_iter_sim * batch_size * duration["sequence"] + duration["total_offset"]
+        cond1 = times > (self.n_iter_sim - n_iteration) * group_size * duration["sequence"] + duration["total_offset"]
+        cond2 = times <= self.n_iter_sim * group_size * duration["sequence"] + duration["total_offset"]
         idc = cond1 & cond2
 
         readout_signal = np.array([readout_signal[idc][senders[idc] == i] for i in set(senders)])
         target_signal = np.array([target_signal[idc][senders[idc] == i] for i in set(senders)])
 
-        readout_signal = readout_signal.reshape((n_out, n_iteration, batch_size, steps["sequence"]))
-        target_signal = target_signal.reshape((n_out, n_iteration, batch_size, steps["sequence"]))
+        readout_signal = readout_signal.reshape((n_out, n_iteration, group_size, steps["sequence"]))
+        target_signal = target_signal.reshape((n_out, n_iteration, group_size, steps["sequence"]))
 
         readout_signal = readout_signal[:, :, :, -steps["learning_window"] :]
         target_signal = target_signal[:, :, :, -steps["learning_window"] :]
@@ -755,7 +757,7 @@ class TrainingPipeline:
         self.simulate("total_offset")
         self.simulate("extension_sim")
         
-        duration["sim"] = batch_size * duration["sequence"] - duration["total_offset"] - duration["extension_sim"]
+        duration["sim"] = group_size * duration["sequence"] - duration["total_offset"] - duration["extension_sim"]
         self.simulate("sim")
 
         self.n_iter_sim += 1
@@ -798,7 +800,7 @@ class TrainingPipeline:
         self.simulate("total_offset")
         self.simulate("extension_sim")
 
-        duration["task"] = self.n_iter_sim * batch_size * duration["sequence"] + duration["total_offset"]
+        duration["task"] = self.n_iter_sim * group_size * duration["sequence"] + duration["total_offset"]
 
         tools.process_recordings(duration, nrns_in, nrns_rec, nrns_out)
         tools.process_timing(nest.GetKernelStatus())
@@ -935,7 +937,7 @@ for title, xlims in zip(
     ["Dynamic variables before training", "Dynamic variables after training"],
     [
         (0, steps["sequence"]),
-        ((n_iter_sim - 1) * batch_size * steps["sequence"], n_iter_sim * batch_size * steps["sequence"]),
+        ((n_iter_sim - 1) * group_size * steps["sequence"], n_iter_sim * group_size * steps["sequence"]),
     ],
 ):
     fig, axs = plt.subplots(9, 1, sharex=True, figsize=(8, 14), gridspec_kw={"hspace": 0.4, "left": 0.2})
