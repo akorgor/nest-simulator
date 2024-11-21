@@ -667,7 +667,7 @@ class TrainingPipeline:
         self.k_iter = 0
         self.early_stop = False
 
-    def evaluate(self):
+    def evaluate(self, n_iteration=1):
         events_mm_out = tools.get_events("multimeter_out")
 
         readout_signal = events_mm_out["readout_signal"]
@@ -675,15 +675,15 @@ class TrainingPipeline:
         senders = events_mm_out["senders"]
         times = events_mm_out["times"]
 
-        cond1 = times > (self.n_iter_sim - 1) * group_size * duration["sequence"] + duration["total_offset"]
+        cond1 = times > (self.n_iter_sim - n_iteration) * group_size * duration["sequence"] + duration["total_offset"]
         cond2 = times <= self.n_iter_sim * group_size * duration["sequence"] + duration["total_offset"]
         idc = cond1 & cond2
 
         readout_signal = np.array([readout_signal[idc][senders[idc] == i] for i in set(senders)])
         target_signal = np.array([target_signal[idc][senders[idc] == i] for i in set(senders)])
 
-        readout_signal = readout_signal.reshape((n_out, 1, group_size, steps["sequence"]))
-        target_signal = target_signal.reshape((n_out, 1, group_size, steps["sequence"]))
+        readout_signal = readout_signal.reshape((n_out, n_iteration, group_size, steps["sequence"]))
+        target_signal = target_signal.reshape((n_out, n_iteration, group_size, steps["sequence"]))
 
         readout_signal = readout_signal[:, :, :, -steps["learning_window"] :]
         target_signal = target_signal[:, :, :, -steps["learning_window"] :]
@@ -695,10 +695,10 @@ class TrainingPipeline:
         accuracy = np.mean((y_target == y_prediction), axis=1)
         errors = 1.0 - accuracy
 
-        self.results_dict["iteration"].append(self.n_iter_sim)
+        self.results_dict["iteration"].extend(range(self.n_iter_sim - n_iteration, self.n_iter_sim))
         self.results_dict["error"].extend(errors)
         self.results_dict["loss"].extend(loss)
-        self.results_dict["label"].append(self.phase_label_previous)
+        self.results_dict["label"].extend([self.phase_label_previous for _ in range(n_iteration)])
 
         self.error = errors[0]
 
@@ -715,11 +715,7 @@ class TrainingPipeline:
         self.simulate("total_offset")
         self.simulate("extension_sim")
 
-        if self.n_iter_sim > 0:
-            self.evaluate()
-
         duration["sim"] = group_size * duration["sequence"] - duration["total_offset"] - duration["extension_sim"]
-
         self.simulate("sim")
 
         self.n_iter_sim += 1
@@ -747,11 +743,10 @@ class TrainingPipeline:
             self.run_phase("test", eta_test)
 
     def simulate(self, k):
-        nest.Simulate(duration[k])
-        tools.process_recordings(duration, nrns_in, nrns_rec, nrns_out)
-        tools.process_timing(nest.GetKernelStatus())
+        nest.Run(duration[k])
 
     def run(self):
+        nest.Prepare()
         while self.k_iter < n_iter_train and not self.early_stop:
             self.run_validation()
             self.run_early_stopping()
@@ -763,13 +758,18 @@ class TrainingPipeline:
         self.simulate("total_offset")
         self.simulate("extension_sim")
 
-        self.evaluate()
-
         duration["task"] = self.n_iter_sim * group_size * duration["sequence"] + duration["total_offset"]
+
+        tools.process_recordings(duration, nrns_in, nrns_rec, nrns_out)
+        tools.process_timing(nest.GetKernelStatus())
+
+        self.evaluate(self.n_iter_sim)
 
         gen_spk_final_update.set({"spike_times": [duration["task"] + duration["extension_sim"] + 1]})
 
         self.simulate("final_update")
+
+        nest.Cleanup()
 
     def get_results(self):
         for k, v in self.results_dict.items():
