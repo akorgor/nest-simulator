@@ -735,7 +735,10 @@ class TrainingPipeline:
         readout_signal = readout_signal[:, :, :, -steps["learning_window"] :]
         target_signal = target_signal[:, :, :, -steps["learning_window"] :]
 
-        loss = -np.mean(np.sum(target_signal * np.log(readout_signal), axis=0), axis=(1, 2))
+        if args.loss == "cross_entropy":
+            loss = -np.mean(np.sum(target_signal * np.log(readout_signal), axis=0), axis=(1, 2))
+        elif args.loss == "mean_squared_error":
+            loss = 0.5 * np.mean(np.sum((readout_signal - target_signal) ** 2, axis=3), axis=(0, 2))
 
         y_prediction = np.argmax(np.mean(readout_signal, axis=3), axis=0)
         y_target = np.argmax(np.mean(target_signal, axis=3), axis=0)
