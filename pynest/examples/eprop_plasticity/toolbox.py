@@ -4,12 +4,14 @@ import os
 import nest
 import numpy as np
 import pandas as pd
+import yaml
 
 
 class Tools:
     def __init__(self, parser):
         self.parser = parser
         self.args = parser.parse_args()
+        self.save_args()
         self.remove_recordings()
         self.timing_dict = {
             "biological_time": 0.0,
@@ -18,6 +20,12 @@ class Tools:
             "time_construction_create": 0.0,
             "time_simulate": 0.0,
         }
+
+    def save_args(self):
+        args_dict = vars(self.args)
+
+        with open(f"{self.args.recordings_dir}/args.yaml", "w") as file:
+            yaml.dump(args_dict, file, default_flow_style=False)
 
     def remove_recordings(self):
         for file in os.listdir(self.args.recordings_dir):
