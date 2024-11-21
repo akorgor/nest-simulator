@@ -104,15 +104,20 @@ except Exception:
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--apply_dales_law", type=str.lower, nargs="*", default=[])
 parser.add_argument("--average_gradient", action=argparse.BooleanOptionalAction, default=False)
 parser.add_argument("--batch_size", type=int, default=1)
+parser.add_argument("--constrain_weights_sign_in", action=argparse.BooleanOptionalAction, default=False)
+parser.add_argument("--constrain_weights_sign_rec", action=argparse.BooleanOptionalAction, default=False)
+parser.add_argument("--constrain_weights_sign_out", action=argparse.BooleanOptionalAction, default=False)
+parser.add_argument("--constrain_weights_dale_in", action=argparse.BooleanOptionalAction, default=False)
+parser.add_argument("--constrain_weights_dale_rec", action=argparse.BooleanOptionalAction, default=False)
+parser.add_argument("--constrain_weights_dale_out", action=argparse.BooleanOptionalAction, default=False)
 parser.add_argument("--c_reg", type=float, default=150.0)
 parser.add_argument("--eta", type=float, default=5e-3)
+parser.add_argument("--exc_to_inh_ratio", type=float, default=1.0)
 parser.add_argument("--loss", type=str, default="mean_squared_error")
 parser.add_argument("--n_iter", type=int, default=5)
 parser.add_argument("--nvp", type=int, default=1)
-parser.add_argument("--prevent_weight_sign_change", type=str.lower, nargs="*", default=[])
 parser.add_argument("--record_dynamics", action=argparse.BooleanOptionalAction, default=True)
 parser.add_argument("--recordings_dir", type=str, default="./")
 parser.add_argument("--reset_neurons", action=argparse.BooleanOptionalAction, default=True)
@@ -425,9 +430,6 @@ tools.constrain_weights(
     nrns_in,
     nrns_rec,
     nrns_out,
-    weights_in_rec,
-    weights_rec_rec,
-    weights_rec_out,
     params_syn_base,
     params_common_syn_eprop,
 )
