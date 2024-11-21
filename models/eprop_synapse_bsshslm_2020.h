@@ -396,7 +396,7 @@ eprop_synapse_bsshslm_2020< targetidentifierT >::eprop_synapse_bsshslm_2020()
   , t_next_update_( 0 )
   , t_previous_trigger_spike_( 0 )
   , tau_m_readout_( 10.0 )
-  , kappa_( std::exp( -Time::get_resolution().get_ms() / tau_m_readout_ ) )
+  , kappa_( 0.97 )
   , is_recurrent_to_recurrent_conn_( false )
   , optimizer_( nullptr )
 {
@@ -420,7 +420,7 @@ eprop_synapse_bsshslm_2020< targetidentifierT >::eprop_synapse_bsshslm_2020( con
   , t_next_update_( kernel().simulation_manager.get_eprop_update_interval().get_steps() )
   , t_previous_trigger_spike_( 0 )
   , tau_m_readout_( es.tau_m_readout_ )
-  , kappa_( std::exp( -Time::get_resolution().get_ms() / tau_m_readout_ ) )
+  , kappa_( 0.97 )
   , is_recurrent_to_recurrent_conn_( es.is_recurrent_to_recurrent_conn_ )
   , optimizer_( es.optimizer_ )
 {
@@ -665,7 +665,7 @@ eprop_synapse_bsshslm_2020< targetidentifierT >::set_status( const DictionaryDat
     {
       throw BadProperty( "Membrane time constant of readout neuron tau_m_readout > 0 required." );
     }
-    kappa_ = std::exp( -Time::get_resolution().get_ms() / tau_m_readout_ );
+    kappa_ = 0.97;
   }
 
   const auto& gcm =
