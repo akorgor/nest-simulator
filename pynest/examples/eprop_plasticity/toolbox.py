@@ -1,6 +1,5 @@
 import glob
 import os
-import time
 
 import nest
 import numpy as np
@@ -26,37 +25,26 @@ class Tools:
             if os.path.isfile(file_path) and (file_path.endswith(".csv") or file_path.endswith(".dat")):
                 os.remove(file_path)
 
-    def select(self, weights, sign):
-        condition = weights >= 0.0 if sign >= 0.0 else weights < 0.0
-        post, pre = np.where(condition)
-        return post, pre
-
-    def apply_dales_law(self, n_pop, n_nrns, label, weights):
-        if label in self.args.apply_dales_law:
-            n_per_pop = n_nrns // n_pop
-            for i in range(n_pop):
-                start = i * n_per_pop
-                half = start + n_per_pop // 2
-                end = start + n_per_pop
-                weights[:, start:half] = np.abs(weights[:, start:half])
-                weights[:, half:end] = -np.abs(weights[:, half:end])
-        return weights
-
-    def constrain_weights(
-        self,
-        nrns_in,
-        nrns_rec,
-        nrns_out,
-        weights_in_rec,
-        weights_rec_rec,
-        weights_rec_out,
-        params_syn_base,
-        params_common_syn_eprop,
-    ):
+    def constrain_weights(self, nrns_in, nrns_rec, nrns_out, params_syn_base, params_common_syn_eprop):
         weight_dicts = [
-            {"label": "in_rec", "weights": weights_in_rec, "nrns_pre": nrns_in, "nrns_post": nrns_rec},
-            {"label": "rec_rec", "weights": weights_rec_rec, "nrns_pre": nrns_rec, "nrns_post": nrns_rec},
-            {"label": "rec_out", "weights": weights_rec_out, "nrns_pre": nrns_rec, "nrns_post": nrns_out},
+            {
+                "nrns_pre": nrns_in,
+                "nrns_post": nrns_rec,
+                "constrain_sign": self.args.constrain_weights_sign_in,
+                "constrain_dale": self.args.constrain_weights_dale_in,
+            },
+            {
+                "nrns_pre": nrns_rec,
+                "nrns_post": nrns_rec,
+                "constrain_sign": self.args.constrain_weights_sign_rec,
+                "constrain_dale": self.args.constrain_weights_dale_rec,
+            },
+            {
+                "nrns_pre": nrns_rec,
+                "nrns_post": nrns_out,
+                "constrain_sign": self.args.constrain_weights_sign_out,
+                "constrain_dale": self.args.constrain_weights_dale_out,
+            },
         ]
 
         sign_dicts = [
@@ -64,43 +52,63 @@ class Tools:
             {"Wmin": -100.0, "Wmax": 0.0},
         ]
 
-        weights_list, nrns_pre_list, nrns_post_list = [], [], []
+        pop_pre_arr = np.array([], dtype=int)
+        pop_post_arr = np.array([], dtype=int)
+        weights_arr = np.array([])
+
         for weight_dict in weight_dicts:
-            n_pre = len(weight_dict["nrns_pre"].tolist())
-            weight_dict["weights"] = self.apply_dales_law(1, n_pre, "in_rec", weight_dict["weights"])
-            if weight_dict["label"] in self.args.prevent_weight_sign_change + self.args.apply_dales_law:
+            if weight_dict["constrain_sign"] or weight_dict["constrain_dale"]:
                 conns = nest.GetConnections(weight_dict["nrns_pre"], weight_dict["nrns_post"])
+                conns_dict = conns.get()
+                conns_dict["source"] = np.array(conns_dict["source"], dtype=int)
+                conns_dict["target"] = np.array(conns_dict["target"], dtype=int)
+                conns_dict["weight"] = np.array(conns_dict["weight"])
+
+                if weight_dict["constrain_dale"]:
+                    source_unique = np.unique(conns_dict["source"])
+                    proportion_inh = 1.0 / (1.0 + self.args.exc_to_inh_ratio)
+                    sources_inh = np.random.choice(
+                        source_unique, int(len(source_unique) * proportion_inh), replace=False
+                    )
+                    new_weights = []
+                    for source, weight in zip(conns_dict["source"], np.abs(conns_dict["weight"])):
+                        if source in sources_inh:
+                            weight *= -1.0
+                        new_weights.append(weight)
+                    conns_dict["weight"] = np.array(new_weights)
+
                 nest.Disconnect(conns)
-                weights_list.append(weight_dict["weights"])
-                nrns_pre_list.append(np.array(weight_dict["nrns_pre"]))
-                nrns_post_list.append(np.array(weight_dict["nrns_post"]))
 
-        if len(self.args.prevent_weight_sign_change + self.args.apply_dales_law) > 0:
-            for sign_dict in sign_dicts:
-                sign = np.sign(sign_dict["Wmin"])
-                pop_post_arr = np.array([], dtype=int)
-                pop_pre_arr = np.array([], dtype=int)
-                weights_arr = np.array([])
-                for weights, nrns_pre, nrns_post in zip(weights_list, nrns_pre_list, nrns_post_list):
-                    post, pre = self.select(weights, sign)
-                    pop_pre_arr = np.append(pop_pre_arr, np.array(nrns_pre)[pre])
-                    pop_post_arr = np.append(pop_post_arr, np.array(nrns_post)[post])
-                    weights_arr = np.append(weights_arr, weights[post, pre].flatten())
+                weights_arr = np.append(weights_arr, conns_dict["weight"])
+                pop_pre_arr = np.append(pop_pre_arr, conns_dict["source"])
+                pop_post_arr = np.append(pop_post_arr, conns_dict["target"])
 
-                base_synapse_model = params_syn_base["synapse_model"]
+        for sign_dict in sign_dicts:
+            sign = np.sign(sign_dict["Wmin"])
+            label = "positive" if sign >= 0.0 else "negative"
 
-                params_common = params_common_syn_eprop
-                params_common["optimizer"].update(sign_dict)
-                params_common["weight"] = sign_dict["Wmin"]
-                synapse_model = f"{base_synapse_model}_{sign}"
-                nest.CopyModel(base_synapse_model, synapse_model, params_common)
+            params_common = params_common_syn_eprop.copy()
+            params_common["optimizer"].update(sign_dict)
+            params_common["weight"] = sign_dict["Wmin"]
+
+            base_synapse_model = params_syn_base["synapse_model"]
+            synapse_model = f"{base_synapse_model}_{label}"
+            nest.CopyModel(base_synapse_model, synapse_model, params_common)
+
+            if len(weights_arr) > 0:
+                idc = np.where(weights_arr >= 0.0 if sign >= 0.0 else weights_arr < 0.0)
 
                 params_base = params_syn_base.copy()
                 params_base["synapse_model"] = synapse_model
-                params_base["weight"] = weights_arr
-                params_base["delay"] = np.ones_like(weights_arr) * params_syn_base["delay"]
+                params_base["weight"] = weights_arr[idc]
+                params_base["delay"] = np.ones_like(params_base["weight"]) * params_syn_base["delay"]
 
-                nest.Connect(pop_pre_arr, pop_post_arr, conn_spec="one_to_one", syn_spec=params_base)
+                nest.Connect(pop_pre_arr[idc], pop_post_arr[idc], conn_spec="one_to_one", syn_spec=params_base)
+
+    def set_synapse_defaults(self, eta):
+        for synapse_model in nest.synapse_models:
+            if synapse_model.startswith("eprop_synapse"):
+                nest.SetDefaults(synapse_model, {"optimizer": {"eta": eta}})
 
     def save_weights_snapshots(self, weights_dict_pre, weights_dict_post):
         for phase, weights_dict in zip(["pre", "post"], [weights_dict_pre, weights_dict_post]):
