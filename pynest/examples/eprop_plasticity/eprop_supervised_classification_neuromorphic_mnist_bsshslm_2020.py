@@ -112,7 +112,6 @@ parser.add_argument("--constrain_weights_sign_out", action=argparse.BooleanOptio
 parser.add_argument("--constrain_weights_dale_in", action=argparse.BooleanOptionalAction, default=False)
 parser.add_argument("--constrain_weights_dale_rec", action=argparse.BooleanOptionalAction, default=False)
 parser.add_argument("--constrain_weights_dale_out", action=argparse.BooleanOptionalAction, default=False)
-parser.add_argument("--exc_to_inh_ratio", type=float, default=1.0)
 parser.add_argument("--average_gradient", action=argparse.BooleanOptionalAction, default=False)
 parser.add_argument("--batch_size", type=int, default=1)
 parser.add_argument("--group_size", type=int, default=1)
