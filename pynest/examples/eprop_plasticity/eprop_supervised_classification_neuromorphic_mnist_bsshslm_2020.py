@@ -105,6 +105,7 @@ except Exception:
 
 parser = argparse.ArgumentParser()
 
+parser.add_argument("--blocklist_dir", type=str, default="./")
 parser.add_argument("--constrain_weights_sign_in", action=argparse.BooleanOptionalAction, default=False)
 parser.add_argument("--constrain_weights_sign_rec", action=argparse.BooleanOptionalAction, default=False)
 parser.add_argument("--constrain_weights_sign_out", action=argparse.BooleanOptionalAction, default=False)
@@ -223,7 +224,7 @@ nest.set_verbosity("M_FATAL")
 # pixels. By omitting Poisson generators for pixels on this blocklist, we effectively reduce the total number of
 # input neurons and Poisson generators required, optimizing the network's resource usage.
 
-pixels_blocklist = np.loadtxt(os.path.join(args.dataset_dir, "NMNIST_pixels_blocklist.txt"))
+pixels_blocklist = np.loadtxt(os.path.join(args.blocklist_dir, "NMNIST_pixels_blocklist.txt"))
 
 pixels_dict = {
     "n_x": 34,  # number of pixels in horizontal direction
