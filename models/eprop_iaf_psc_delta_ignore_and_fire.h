@@ -1,5 +1,5 @@
 /*
- *  eprop_iaf_psc_delta.h
+ *  eprop_iaf_psc_delta_ignore_and_fire.h
  *
  *  This file is part of NEST.
  *
@@ -20,8 +20,8 @@
  *
  */
 
-#ifndef EPROP_IAF_PSC_DELTA_H
-#define EPROP_IAF_PSC_DELTA_H
+#ifndef EPROP_IAF_PSC_DELTA_IGNORE_AND_FIRE_H
+#define EPROP_IAF_PSC_DELTA_IGNORE_AND_FIRE_H
 
 // nestkernel
 #include "connection.h"
@@ -47,14 +47,14 @@ postsynaptic currents for e-prop plasticity
 Description
 +++++++++++
 
-``eprop_iaf_psc_delta`` is an implementation of a leaky integrate-and-fire
+``eprop_iaf_psc_delta_ignore_and_fire`` is an implementation of a leaky integrate-and-fire
 neuron model with delta-shaped postsynaptic currents used for eligibility
 propagation (e-prop) plasticity.
 
 E-prop plasticity was originally introduced and implemented in TensorFlow in [1]_.
 
 .. note::
-  The neuron dynamics of the ``eprop_iaf_psc_delta`` model (excluding e-prop
+  The neuron dynamics of the ``eprop_iaf_psc_delta_ignore_and_fire`` model (excluding e-prop
   plasticity) are similar to the neuron dynamics of the ``iaf_psc_delta`` model,
   with minor differences, such as the propagator of the post-synaptic current
   and the voltage reset upon a spike.
@@ -196,7 +196,7 @@ For more information on the implementation details of the neuron model, see [7]_
 
 For more information on e-prop plasticity, see the documentation on the other e-prop models:
 
- * :doc:`eprop_iaf_psc_delta_adapt<../models/eprop_iaf_psc_delta_adapt/>`
+ * :doc:`eprop_iaf_psc_delta_ignore_and_fire_adapt<../models/eprop_iaf_psc_delta_ignore_and_fire_adapt/>`
  * :doc:`eprop_readout<../models/eprop_readout/>`
  * :doc:`eprop_synapse<../models/eprop_synapse/>`
  * :doc:`eprop_learning_signal_connection<../models/eprop_learning_signal_connection/>`
@@ -353,11 +353,11 @@ See also
 Examples using this model
 +++++++++++++++++++++++++
 
-.. listexamples:: eprop_iaf_psc_delta
+.. listexamples:: eprop_iaf_psc_delta_ignore_and_fire
 
 EndUserDocs */
 
-void register_eprop_iaf_psc_delta( const std::string& name );
+void register_eprop_iaf_psc_delta_ignore_and_fire( const std::string& name );
 
 /**
  * @brief Class implementing an adaptive LIF neuron model for e-prop plasticity with additional biological features.
@@ -366,15 +366,15 @@ void register_eprop_iaf_psc_delta( const std::string& name );
  * and spike threshold adaptation for e-prop plasticity according to Bellec et al. (2020) with additional biological
  * features described in Korcsak-Gorzo, Stapmanns, and Espinoza Valverde et al. (in preparation).
  */
-class eprop_iaf_psc_delta : public EpropArchivingNodeRecurrent
+class eprop_iaf_psc_delta_ignore_and_fire : public EpropArchivingNodeRecurrent
 {
 
 public:
   //! Default constructor.
-  eprop_iaf_psc_delta();
+  eprop_iaf_psc_delta_ignore_and_fire();
 
   //! Copy constructor.
-  eprop_iaf_psc_delta( const eprop_iaf_psc_delta& );
+  eprop_iaf_psc_delta_ignore_and_fire( const eprop_iaf_psc_delta_ignore_and_fire& );
 
   using Node::handle;
   using Node::handles_test_event;
@@ -419,14 +419,20 @@ private:
   surrogate_gradient_function compute_surrogate_gradient_;
 
   //! Map for storing a static set of recordables.
-  friend class RecordablesMap< eprop_iaf_psc_delta >;
+  friend class RecordablesMap< eprop_iaf_psc_delta_ignore_and_fire >;
 
   //! Logger for universal data supporting the data logging request / reply mechanism. Populated with a recordables map.
-  friend class UniversalDataLogger< eprop_iaf_psc_delta >;
+  friend class UniversalDataLogger< eprop_iaf_psc_delta_ignore_and_fire >;
 
   //! Structure of parameters.
   struct Parameters_
   {
+    //! Phase
+    double phase_;
+
+    //! Firing rate (spikes/s).
+    double rate_;
+
     //! Time constant of the membrane (ms).
     double tau_m_;
 
@@ -524,10 +530,10 @@ private:
   struct Buffers_
   {
     //! Default constructor.
-    Buffers_( eprop_iaf_psc_delta& );
+    Buffers_( eprop_iaf_psc_delta_ignore_and_fire& );
 
     //! Copy constructor.
-    Buffers_( const Buffers_&, eprop_iaf_psc_delta& );
+    Buffers_( const Buffers_&, eprop_iaf_psc_delta_ignore_and_fire& );
 
     //! Buffer for incoming spikes.
     RingBuffer spikes_;
@@ -536,12 +542,18 @@ private:
     RingBuffer currents_;
 
     //! Logger for universal data.
-    UniversalDataLogger< eprop_iaf_psc_delta > logger_;
+    UniversalDataLogger< eprop_iaf_psc_delta_ignore_and_fire > logger_;
   };
 
   //! Structure of internal variables.
   struct Variables_
   {
+    //! Phase steps.
+    long phase_steps_;
+
+    //! Firing period steps.
+    long firing_period_steps_;
+
     //! Propagator matrix entry for evolving the membrane voltage (mathematical symbol "alpha" in user documentation).
     double P_v_m_;
 
@@ -591,17 +603,24 @@ private:
   Buffers_ B_;
 
   //! Map storing a static set of recordables.
-  static RecordablesMap< eprop_iaf_psc_delta > recordablesMap_;
+  static RecordablesMap< eprop_iaf_psc_delta_ignore_and_fire > recordablesMap_;
+
+  inline void
+  calc_initial_variables_()
+  {
+    V_.firing_period_steps_ = Time( Time::ms( 1. / P_.rate_ * 1000. ) ).get_steps();
+    V_.phase_steps_ = Time( Time::ms( P_.phase_ / P_.rate_ * 1000. ) ).get_steps();
+  }
 };
 
 inline long
-eprop_iaf_psc_delta::get_eprop_isi_trace_cutoff() const
+eprop_iaf_psc_delta_ignore_and_fire::get_eprop_isi_trace_cutoff() const
 {
   return V_.eprop_isi_trace_cutoff_steps_;
 }
 
 inline size_t
-eprop_iaf_psc_delta::send_test_event( Node& target, size_t receptor_type, synindex, bool )
+eprop_iaf_psc_delta_ignore_and_fire::send_test_event( Node& target, size_t receptor_type, synindex, bool )
 {
   SpikeEvent e;
   e.set_sender( *this );
@@ -609,7 +628,7 @@ eprop_iaf_psc_delta::send_test_event( Node& target, size_t receptor_type, synind
 }
 
 inline size_t
-eprop_iaf_psc_delta::handles_test_event( SpikeEvent&, size_t receptor_type )
+eprop_iaf_psc_delta_ignore_and_fire::handles_test_event( SpikeEvent&, size_t receptor_type )
 {
   if ( receptor_type != 0 )
   {
@@ -620,7 +639,7 @@ eprop_iaf_psc_delta::handles_test_event( SpikeEvent&, size_t receptor_type )
 }
 
 inline size_t
-eprop_iaf_psc_delta::handles_test_event( CurrentEvent&, size_t receptor_type )
+eprop_iaf_psc_delta_ignore_and_fire::handles_test_event( CurrentEvent&, size_t receptor_type )
 {
   if ( receptor_type != 0 )
   {
@@ -631,7 +650,7 @@ eprop_iaf_psc_delta::handles_test_event( CurrentEvent&, size_t receptor_type )
 }
 
 inline size_t
-eprop_iaf_psc_delta::handles_test_event( LearningSignalConnectionEvent&, size_t receptor_type )
+eprop_iaf_psc_delta_ignore_and_fire::handles_test_event( LearningSignalConnectionEvent&, size_t receptor_type )
 {
   if ( receptor_type != 0 )
   {
@@ -642,7 +661,7 @@ eprop_iaf_psc_delta::handles_test_event( LearningSignalConnectionEvent&, size_t 
 }
 
 inline size_t
-eprop_iaf_psc_delta::handles_test_event( DataLoggingRequest& dlr, size_t receptor_type )
+eprop_iaf_psc_delta_ignore_and_fire::handles_test_event( DataLoggingRequest& dlr, size_t receptor_type )
 {
   if ( receptor_type != 0 )
   {
@@ -653,7 +672,7 @@ eprop_iaf_psc_delta::handles_test_event( DataLoggingRequest& dlr, size_t recepto
 }
 
 inline void
-eprop_iaf_psc_delta::get_status( DictionaryDatum& d ) const
+eprop_iaf_psc_delta_ignore_and_fire::get_status( DictionaryDatum& d ) const
 {
   P_.get( d );
   S_.get( d, P_ );
@@ -661,7 +680,7 @@ eprop_iaf_psc_delta::get_status( DictionaryDatum& d ) const
 }
 
 inline void
-eprop_iaf_psc_delta::set_status( const DictionaryDatum& d )
+eprop_iaf_psc_delta_ignore_and_fire::set_status( const DictionaryDatum& d )
 {
   // temporary copies in case of errors
   Parameters_ ptmp = P_;
@@ -673,8 +692,10 @@ eprop_iaf_psc_delta::set_status( const DictionaryDatum& d )
 
   P_ = ptmp;
   S_ = stmp;
+
+  eprop_iaf_psc_delta_ignore_and_fire::calc_initial_variables_();
 }
 
 } // namespace nest
 
-#endif // EPROP_IAF_PSC_DELTA_H
+#endif // EPROP_IAF_PSC_DELTA_IGNORE_AND_FIRE_H
