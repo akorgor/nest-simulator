@@ -1,5 +1,5 @@
 /*
- *  eprop_iaf_psc_delta.cpp
+ *  eprop_iaf_psc_delta_ignore_and_fire.cpp
  *
  *  This file is part of NEST.
  *
@@ -21,7 +21,7 @@
  */
 
 // nest models
-#include "eprop_iaf_psc_delta.h"
+#include "eprop_iaf_psc_delta_ignore_and_fire.h"
 
 // C++
 #include <limits>
@@ -43,32 +43,33 @@ namespace nest
 {
 
 void
-register_eprop_iaf_psc_delta( const std::string& name )
+register_eprop_iaf_psc_delta_ignore_and_fire( const std::string& name )
 {
-  register_node_model< eprop_iaf_psc_delta >( name );
+  register_node_model< eprop_iaf_psc_delta_ignore_and_fire >( name );
 }
 
 /* ----------------------------------------------------------------
  * Recordables map
  * ---------------------------------------------------------------- */
 
-RecordablesMap< eprop_iaf_psc_delta > eprop_iaf_psc_delta::recordablesMap_;
+RecordablesMap< eprop_iaf_psc_delta_ignore_and_fire > eprop_iaf_psc_delta_ignore_and_fire::recordablesMap_;
 
 template <>
 void
-RecordablesMap< eprop_iaf_psc_delta >::create()
+RecordablesMap< eprop_iaf_psc_delta_ignore_and_fire >::create()
 {
-  insert_( names::V_m, &eprop_iaf_psc_delta::get_v_m_ );
-  insert_( names::learning_signal, &eprop_iaf_psc_delta::get_learning_signal_ );
-  insert_( names::surrogate_gradient, &eprop_iaf_psc_delta::get_surrogate_gradient_ );
+  insert_( names::V_m, &eprop_iaf_psc_delta_ignore_and_fire::get_v_m_ );
+  insert_( names::learning_signal, &eprop_iaf_psc_delta_ignore_and_fire::get_learning_signal_ );
+  insert_( names::surrogate_gradient, &eprop_iaf_psc_delta_ignore_and_fire::get_surrogate_gradient_ );
 }
 
 /* ----------------------------------------------------------------
  * Default constructors for parameters, state, and buffers
  * ---------------------------------------------------------------- */
 
-eprop_iaf_psc_delta::Parameters_::Parameters_()
-  : tau_m_( 10.0 )
+eprop_iaf_psc_delta_ignore_and_fire::Parameters_::Parameters_()
+  : phase_( 1.0 )
+  , rate_( 10. )
   , C_m_( 250.0 )
   , t_ref_( 2.0 )
   , E_L_( -70.0 )
@@ -88,7 +89,7 @@ eprop_iaf_psc_delta::Parameters_::Parameters_()
 {
 }
 
-eprop_iaf_psc_delta::State_::State_()
+eprop_iaf_psc_delta_ignore_and_fire::State_::State_()
   : i_in_( 0.0 )
   , v_m_( 0.0 )
   , r_( 0 )
@@ -98,12 +99,12 @@ eprop_iaf_psc_delta::State_::State_()
 {
 }
 
-eprop_iaf_psc_delta::Buffers_::Buffers_( eprop_iaf_psc_delta& n )
+eprop_iaf_psc_delta_ignore_and_fire::Buffers_::Buffers_( eprop_iaf_psc_delta_ignore_and_fire& n )
   : logger_( n )
 {
 }
 
-eprop_iaf_psc_delta::Buffers_::Buffers_( const Buffers_&, eprop_iaf_psc_delta& n )
+eprop_iaf_psc_delta_ignore_and_fire::Buffers_::Buffers_( const Buffers_&, eprop_iaf_psc_delta_ignore_and_fire& n )
   : logger_( n )
 {
 }
@@ -113,8 +114,10 @@ eprop_iaf_psc_delta::Buffers_::Buffers_( const Buffers_&, eprop_iaf_psc_delta& n
  * ---------------------------------------------------------------- */
 
 void
-eprop_iaf_psc_delta::Parameters_::get( DictionaryDatum& d ) const
+eprop_iaf_psc_delta_ignore_and_fire::Parameters_::get( DictionaryDatum& d ) const
 {
+  def< double >( d, names::phase, phase_ );
+  def< double >( d, names::rate, rate_ );
   def< double >( d, names::E_L, E_L_ );
   def< double >( d, names::I_e, I_e_ );
   def< double >( d, names::V_th, V_th_ + E_L_ );
@@ -135,8 +138,21 @@ eprop_iaf_psc_delta::Parameters_::get( DictionaryDatum& d ) const
 }
 
 double
-eprop_iaf_psc_delta::Parameters_::set( const DictionaryDatum& d, Node* node )
+eprop_iaf_psc_delta_ignore_and_fire::Parameters_::set( const DictionaryDatum& d, Node* node )
 {
+  updateValueParam< double >( d, names::phase, phase_, node );
+  updateValueParam< double >( d, names::rate, rate_, node );
+
+  if ( phase_ <= 0.0 or phase_ > 1.0 )
+  {
+    throw BadProperty( "Phase must be > 0 and <= 1." );
+  }
+
+  if ( rate_ <= 0.0 )
+  {
+    throw BadProperty( "Firing rate must be > 0." );
+  }
+
   // if leak potential is changed, adjust all variables defined relative to it
   const double ELold = E_L_;
   updateValueParam< double >( d, names::E_L, E_L_, node );
@@ -224,7 +240,7 @@ eprop_iaf_psc_delta::Parameters_::set( const DictionaryDatum& d, Node* node )
 }
 
 void
-eprop_iaf_psc_delta::State_::get( DictionaryDatum& d, const Parameters_& p ) const
+eprop_iaf_psc_delta_ignore_and_fire::State_::get( DictionaryDatum& d, const Parameters_& p ) const
 {
   def< double >( d, names::V_m, v_m_ + p.E_L_ );
   def< double >( d, names::surrogate_gradient, surrogate_gradient_ );
@@ -232,7 +248,10 @@ eprop_iaf_psc_delta::State_::get( DictionaryDatum& d, const Parameters_& p ) con
 }
 
 void
-eprop_iaf_psc_delta::State_::set( const DictionaryDatum& d, const Parameters_& p, double delta_EL, Node* node )
+eprop_iaf_psc_delta_ignore_and_fire::State_::set( const DictionaryDatum& d,
+  const Parameters_& p,
+  double delta_EL,
+  Node* node )
 {
   v_m_ -= updateValueParam< double >( d, names::V_m, v_m_, node ) ? p.E_L_ : delta_EL;
 }
@@ -241,21 +260,23 @@ eprop_iaf_psc_delta::State_::set( const DictionaryDatum& d, const Parameters_& p
  * Default and copy constructor for node
  * ---------------------------------------------------------------- */
 
-eprop_iaf_psc_delta::eprop_iaf_psc_delta()
+eprop_iaf_psc_delta_ignore_and_fire::eprop_iaf_psc_delta_ignore_and_fire()
   : EpropArchivingNodeRecurrent()
   , P_()
   , S_()
   , B_( *this )
 {
   recordablesMap_.create();
+  eprop_iaf_psc_delta_ignore_and_fire::calc_initial_variables_();
 }
 
-eprop_iaf_psc_delta::eprop_iaf_psc_delta( const eprop_iaf_psc_delta& n )
+eprop_iaf_psc_delta_ignore_and_fire::eprop_iaf_psc_delta_ignore_and_fire( const eprop_iaf_psc_delta_ignore_and_fire& n )
   : EpropArchivingNodeRecurrent( n )
   , P_( n.P_ )
   , S_( n.S_ )
   , B_( n.B_, *this )
 {
+  eprop_iaf_psc_delta_ignore_and_fire::calc_initial_variables_();
 }
 
 /* ----------------------------------------------------------------
@@ -263,7 +284,7 @@ eprop_iaf_psc_delta::eprop_iaf_psc_delta( const eprop_iaf_psc_delta& n )
  * ---------------------------------------------------------------- */
 
 void
-eprop_iaf_psc_delta::init_buffers_()
+eprop_iaf_psc_delta_ignore_and_fire::init_buffers_()
 {
   B_.spikes_.clear();   // includes resize
   B_.currents_.clear(); // includes resize
@@ -271,7 +292,7 @@ eprop_iaf_psc_delta::init_buffers_()
 }
 
 void
-eprop_iaf_psc_delta::pre_run_hook()
+eprop_iaf_psc_delta_ignore_and_fire::pre_run_hook()
 {
   B_.logger_.init(); // ensures initialization in case multimeter connected after Simulate
 
@@ -289,13 +310,13 @@ eprop_iaf_psc_delta::pre_run_hook()
 }
 
 long
-eprop_iaf_psc_delta::get_shift() const
+eprop_iaf_psc_delta_ignore_and_fire::get_shift() const
 {
   return offset_gen_ + delay_in_rec_;
 }
 
 bool
-eprop_iaf_psc_delta::is_eprop_recurrent_node() const
+eprop_iaf_psc_delta_ignore_and_fire::is_eprop_recurrent_node() const
 {
   return true;
 }
@@ -305,7 +326,7 @@ eprop_iaf_psc_delta::is_eprop_recurrent_node() const
  * ---------------------------------------------------------------- */
 
 void
-eprop_iaf_psc_delta::update( Time const& origin, const long from, const long to )
+eprop_iaf_psc_delta_ignore_and_fire::update( Time const& origin, const long from, const long to )
 {
   const double dt = Time::get_resolution().get_ms();
 
@@ -341,15 +362,20 @@ eprop_iaf_psc_delta::update( Time const& origin, const long from, const long to 
 
     S_.surrogate_gradient_ = ( this->*compute_surrogate_gradient_ )( S_.r_, S_.v_m_, P_.V_th_, P_.beta_, P_.gamma_ );
 
-    if ( S_.v_m_ >= P_.V_th_ )
+    if ( V_.phase_steps_ == 0 )
     {
       S_.r_ = V_.RefractoryCounts_;
       S_.v_m_ = P_.V_reset_;
+      V_.phase_steps_ = V_.firing_period_steps_ - 1;
 
       SpikeEvent se;
       kernel().event_delivery_manager.send( *this, se, lag );
 
       z = 1.0;
+    }
+    else
+    {
+      --V_.phase_steps_;
     }
 
     append_new_eprop_history_entry( t );
@@ -369,7 +395,7 @@ eprop_iaf_psc_delta::update( Time const& origin, const long from, const long to 
  * ---------------------------------------------------------------- */
 
 void
-eprop_iaf_psc_delta::handle( SpikeEvent& e )
+eprop_iaf_psc_delta_ignore_and_fire::handle( SpikeEvent& e )
 {
   assert( e.get_delay_steps() > 0 );
 
@@ -378,7 +404,7 @@ eprop_iaf_psc_delta::handle( SpikeEvent& e )
 }
 
 void
-eprop_iaf_psc_delta::handle( CurrentEvent& e )
+eprop_iaf_psc_delta_ignore_and_fire::handle( CurrentEvent& e )
 {
   assert( e.get_delay_steps() > 0 );
 
@@ -387,7 +413,7 @@ eprop_iaf_psc_delta::handle( CurrentEvent& e )
 }
 
 void
-eprop_iaf_psc_delta::handle( LearningSignalConnectionEvent& e )
+eprop_iaf_psc_delta_ignore_and_fire::handle( LearningSignalConnectionEvent& e )
 {
   for ( auto it_event = e.begin(); it_event != e.end(); )
   {
@@ -401,13 +427,13 @@ eprop_iaf_psc_delta::handle( LearningSignalConnectionEvent& e )
 }
 
 void
-eprop_iaf_psc_delta::handle( DataLoggingRequest& e )
+eprop_iaf_psc_delta_ignore_and_fire::handle( DataLoggingRequest& e )
 {
   B_.logger_.handle( e );
 }
 
 void
-eprop_iaf_psc_delta::compute_gradient( const long t_spike,
+eprop_iaf_psc_delta_ignore_and_fire::compute_gradient( const long t_spike,
   const long t_spike_previous,
   double& z_previous_buffer,
   double& z_bar,
