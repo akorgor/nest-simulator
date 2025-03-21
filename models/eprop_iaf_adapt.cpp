@@ -357,7 +357,11 @@ eprop_iaf_adapt::update( Time const& origin, const long from, const long to )
 
     append_new_eprop_history_entry( t );
     write_surrogate_gradient_to_history( t, S_.surrogate_gradient_ );
-    write_firing_rate_reg_to_history( t, S_.z_, P_.f_target_, P_.kappa_reg_, P_.c_reg_ );
+    const long update_interval = kernel().simulation_manager.get_eprop_update_interval().get_steps();
+    const long shift = get_shift();
+    const long interval_step = ( t - shift ) % update_interval;
+
+    write_firing_rate_reg_to_history( t, interval_step, S_.z_, P_.f_target_, P_.kappa_reg_, P_.c_reg_ );
 
     S_.learning_signal_ = get_learning_signal_from_history( t );
 
