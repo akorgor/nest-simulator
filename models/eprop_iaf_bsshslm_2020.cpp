@@ -83,6 +83,7 @@ eprop_iaf_bsshslm_2020::Parameters_::Parameters_()
   , tau_m_( 10.0 )
   , V_min_( -std::numeric_limits< double >::max() )
   , V_th_( -55.0 - E_L_ )
+  , activation_interval_( 3 )
 {
 }
 
@@ -94,6 +95,7 @@ eprop_iaf_bsshslm_2020::State_::State_()
   , v_m_( 0.0 )
   , z_( 0.0 )
   , z_in_( 0.0 )
+  , previous_event_was_activation_( false )
 {
 }
 
@@ -127,6 +129,7 @@ eprop_iaf_bsshslm_2020::Parameters_::get( DictionaryDatum& d ) const
   def< double >( d, names::tau_m, tau_m_ );
   def< double >( d, names::V_min, V_min_ + E_L_ );
   def< double >( d, names::V_th, V_th_ + E_L_ );
+  def< long >( d, names::activation_interval, activation_interval_ );
 }
 
 double
@@ -152,6 +155,7 @@ eprop_iaf_bsshslm_2020::Parameters_::set( const DictionaryDatum& d, Node* node )
   updateValueParam< double >( d, names::gamma, gamma_, node );
   updateValueParam< double >( d, names::I_e, I_e_, node );
   updateValueParam< bool >( d, names::regular_spike_arrival, regular_spike_arrival_, node );
+  updateValueParam< long >( d, names::activation_interval, activation_interval_, node );
 
   if ( updateValueParam< std::string >( d, names::surrogate_gradient_function, surrogate_gradient_function_, node ) )
   {
@@ -193,6 +197,10 @@ eprop_iaf_bsshslm_2020::Parameters_::set( const DictionaryDatum& d, Node* node )
     throw BadProperty( "Spike threshold voltage V_th ≥ minimal voltage V_min required." );
   }
 
+  if ( activation_interval_ < 0 )
+  {
+    throw BadProperty( "Interval between activations activation_interval ≥ 0 required." );
+  }
   return delta_EL;
 }
 
@@ -313,6 +321,17 @@ eprop_iaf_bsshslm_2020::update( Time const& origin, const long from, const long 
 
       S_.z_ = 1.0;
       S_.r_ = V_.RefractoryCounts_;
+      set_last_event_time( t );
+      S_.previous_event_was_activation_ = false;
+    }
+    else if ( not S_.previous_event_was_activation_ and get_last_event_time() > 0
+      and t - get_last_event_time() >= P_.activation_interval_ * update_interval )
+    {
+      SpikeEvent se;
+      se.set_pure_activation();
+      kernel().event_delivery_manager.send( *this, se, lag );
+      set_last_event_time( t );
+      S_.previous_event_was_activation_ = true;
     }
 
     append_new_eprop_history_entry( t );

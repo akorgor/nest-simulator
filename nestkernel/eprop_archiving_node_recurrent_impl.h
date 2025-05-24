@@ -25,6 +25,7 @@
 #include "eprop_archiving_node_impl.h"
 #include "eprop_archiving_node_recurrent.h"
 #include "kernel_manager.h"
+#include <unordered_set>
 
 // sli
 #include "dictutils.h"
@@ -48,6 +49,7 @@ EpropArchivingNodeRecurrent< hist_shift_required >::EpropArchivingNodeRecurrent(
   : EpropArchivingNode()
   , firing_rate_reg_( 0.0 )
   , f_av_( 0.0 )
+  , last_spike_time_( 0 )
   , n_spikes_( 0 )
 {
 }
@@ -57,6 +59,7 @@ EpropArchivingNodeRecurrent< hist_shift_required >::EpropArchivingNodeRecurrent(
   : EpropArchivingNode( n )
   , firing_rate_reg_( n.firing_rate_reg_ )
   , f_av_( n.f_av_ )
+  , last_spike_time_( n.last_spike_time_ )
   , n_spikes_( n.n_spikes_ )
 {
 }
@@ -282,20 +285,27 @@ template < bool hist_shift_required >
 void
 EpropArchivingNodeRecurrent< hist_shift_required >::erase_used_firing_rate_reg_history()
 {
-  auto it_update_hist = update_history_.begin();
-  auto it_reg_hist = firing_rate_reg_history_.begin();
-
-  while ( it_update_hist != update_history_.end() and it_reg_hist != firing_rate_reg_history_.end() )
+  if ( firing_rate_reg_history_.empty() )
   {
-    if ( it_update_hist->access_counter_ == 0 )
-    {
-      it_reg_hist = firing_rate_reg_history_.erase( it_reg_hist );
-    }
-    else
+    return;
+  }
+  std::unordered_set< long > update_times;
+  for ( const auto& it_update_hist : update_history_ )
+  {
+    update_times.insert( it_update_hist.t_ );
+  }
+
+  auto it_reg_hist = firing_rate_reg_history_.begin();
+  while ( it_reg_hist != ( firing_rate_reg_history_.end() - 1 ) )
+  {
+    if ( update_times.find( it_reg_hist->t_ ) != update_times.end() )
     {
       ++it_reg_hist;
     }
-    ++it_update_hist;
+    else
+    {
+      it_reg_hist = firing_rate_reg_history_.erase( it_reg_hist );
+    }
   }
 }
 

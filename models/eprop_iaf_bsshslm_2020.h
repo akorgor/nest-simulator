@@ -365,6 +365,9 @@ private:
     //! Spike threshold voltage relative to the leak membrane potential (mV).
     double V_th_;
 
+    //! Interval between two activations.
+    long activation_interval_;
+
     //! Default constructor.
     Parameters_();
 
@@ -398,6 +401,9 @@ private:
 
     //! Binary input spike state variable - 1.0 if the neuron has spiked in the previous time step and 0.0 otherwise.
     double z_in_;
+
+    //! Previous event was an activation event.
+    bool previous_event_was_activation_;
 
     //! Default constructor.
     State_();

@@ -322,6 +322,10 @@ public:
    */
   void set_stamp( Time const& );
 
+  void set_pure_activation();
+  void unset_pure_activation();
+  bool get_pure_activation();
+
 protected:
   size_t sender_node_id_;       //!< node ID of sender or 0
   SpikeData sender_spike_data_; //!< spike data of sender node, in some cases required to retrieve node ID
@@ -972,6 +976,24 @@ Event::set_stamp( Time const& s )
                     // stamp_steps needs to be recalculated from
                     // stamp_ next time it is needed (e.g., in
                     // get_rel_delivery_steps)
+}
+
+inline void
+Event::set_pure_activation()
+{
+  sender_spike_data_.set_pure_activation_marker();
+}
+
+inline void
+Event::unset_pure_activation()
+{
+  sender_spike_data_.unset_pure_activation_marker();
+}
+
+inline bool
+Event::get_pure_activation()
+{
+  return sender_spike_data_.is_pure_activation_marker();
 }
 
 inline long

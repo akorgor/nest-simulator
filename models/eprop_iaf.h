@@ -397,7 +397,10 @@ private:
     double&,
     double&,
     const CommonSynapseProperties&,
-    WeightOptimizer* ) override;
+    WeightOptimizer*,
+    const bool,
+    const bool,
+    double& ) override;
 
   long get_shift() const override;
   bool is_eprop_recurrent_node() const override;
@@ -457,6 +460,9 @@ private:
 
     //! Time interval from the previous spike until the cutoff of e-prop update integration between two spikes (ms).
     double eprop_isi_trace_cutoff_;
+
+    //! Interval between two activations.
+    long activation_interval_;
 
     //! Default constructor.
     Parameters_();
