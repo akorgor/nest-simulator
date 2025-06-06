@@ -307,6 +307,7 @@ EpropArchivingNodeRecurrent< hist_shift_required >::erase_used_firing_rate_reg_h
       it_reg_hist = firing_rate_reg_history_.erase( it_reg_hist );
     }
   }
+  firing_rate_reg_history_.shrink_to_fit();
 }
 
 
