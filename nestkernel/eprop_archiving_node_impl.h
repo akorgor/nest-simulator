@@ -118,6 +118,7 @@ EpropArchivingNode< HistEntryT >::write_update_to_history( const long t_previous
       }
     }
   }
+  update_history_.shrink_to_fit();
 }
 
 template < typename HistEntryT >
@@ -165,6 +166,7 @@ EpropArchivingNode< HistEntryT >::erase_used_eprop_history()
   }
   // erase no longer needed entries before the earliest current update
   eprop_history_.erase( get_eprop_history( 0 ), get_eprop_history( update_history_.begin()->t_ ) );
+  eprop_history_.shrink_to_fit();
 }
 
 template < typename HistEntryT >
@@ -204,6 +206,8 @@ EpropArchivingNode< HistEntryT >::erase_used_eprop_history( const long t_spike, 
   {
     eprop_history_.erase( eprop_history_.begin(), it_end );
   }
+  update_history_.shrink_to_fit();
+  eprop_history_.shrink_to_fit();
 }
 
 template < typename HistEntryT >
