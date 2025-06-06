@@ -60,6 +60,7 @@ void
 RecordablesMap< eprop_iaf_bsshslm_2020 >::create()
 {
   insert_( names::eprop_history_duration, &eprop_iaf_bsshslm_2020::get_eprop_history_duration );
+  insert_( "eprop_history_capacity", &eprop_iaf_bsshslm_2020::get_eprop_history_capacity );
   insert_( names::learning_signal, &eprop_iaf_bsshslm_2020::get_learning_signal_ );
   insert_( names::surrogate_gradient, &eprop_iaf_bsshslm_2020::get_surrogate_gradient_ );
   insert_( names::V_m, &eprop_iaf_bsshslm_2020::get_v_m_ );

@@ -213,6 +213,13 @@ EpropArchivingNode< HistEntryT >::get_eprop_history_duration() const
   return Time::get_resolution().get_ms() * eprop_history_.size();
 }
 
+template < typename HistEntryT >
+inline double
+EpropArchivingNode< HistEntryT >::get_eprop_history_capacity() const
+{
+  return eprop_history_.capacity();
+}
+
 } // namespace nest
 
 #endif // EPROP_ARCHIVING_NODE_IMPL_H

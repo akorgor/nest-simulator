@@ -115,6 +115,7 @@ public:
    * Retrieves the size of the eprop history buffer.
    */
   double get_eprop_history_duration() const;
+  double get_eprop_history_capacity() const;
 
 protected:
   //! Returns correct shift for history depending on whether it is a normal or a bsshslm_2020 model.
