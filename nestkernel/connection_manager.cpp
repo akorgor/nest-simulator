@@ -1701,6 +1701,7 @@ nest::ConnectionManager::deliver_secondary_events( const size_t tid,
           // and returns how many targets this event was delivered to
           lcid += connections_[ tid ][ syn_id ]->send( tid, lcid, cm, prototype );
         }
+        delete &prototype;
       }
     }
   }
