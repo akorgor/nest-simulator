@@ -165,7 +165,7 @@ EpropArchivingNode< HistEntryT >::erase_used_eprop_history()
     }
   }
   // erase no longer needed entries before the earliest current update
-  eprop_history_.erase( get_eprop_history( 0 ), get_eprop_history( update_history_.begin()->t_ ) );
+  eprop_history_.erase( eprop_history_.begin(), get_eprop_history( update_history_.begin()->t_ ) );
   eprop_history_.shrink_to_fit();
 }
 
