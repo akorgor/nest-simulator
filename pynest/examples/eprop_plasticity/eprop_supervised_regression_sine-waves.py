@@ -144,12 +144,12 @@ np.random.seed(rng_seed)  # fix numpy random seed
 # .....................
 # The task's temporal structure is then defined, once as time steps and once as durations in milliseconds.
 # Even though each sample is processed independently during training, we aggregate predictions and true
-# labels across a group of samples during the evaluation phase. The number of samples in this group is
-# determined by the `group_size` parameter. This data is then used to assess the neural network's
+# labels across a batch of samples during the evaluation phase. The number of samples in this batch is
+# determined by the `batch_size` parameter. This data is then used to assess the neural network's
 # performance metrics, such as average accuracy and mean error. Increasing the number of iterations enhances
 # learning performance.
 
-group_size = args.batch_size  # number of instances over which to evaluate the learning performance
+batch_size = args.batch_size  # number of instances over which to evaluate the learning performance
 n_iter = args.n_iter  # number of iterations, 2000 in reference [2]
 
 steps = {
@@ -157,7 +157,7 @@ steps = {
 }
 
 steps["learning_window"] = steps["sequence"]  # time steps of window with non-zero learning signals
-steps["task"] = n_iter * group_size * steps["sequence"]  # time steps of task
+steps["task"] = n_iter * batch_size * steps["sequence"]  # time steps of task
 
 steps.update(
     {
@@ -482,7 +482,7 @@ target_signal = generate_superimposed_sines(steps["sequence"], [1000, 500, 333, 
 
 params_gen_rate_target = {
     "amplitude_times": np.arange(0.0, duration["task"], duration["step"]) + duration["total_offset"],
-    "amplitude_values": np.tile(target_signal, n_iter * group_size),
+    "amplitude_values": np.tile(target_signal, n_iter * batch_size),
 }
 
 ####################
@@ -593,8 +593,8 @@ senders = events_mm_out["senders"]
 readout_signal = np.array([readout_signal[senders == i] for i in set(senders)])
 target_signal = np.array([target_signal[senders == i] for i in set(senders)])
 
-readout_signal = readout_signal.reshape((n_out, n_iter, group_size, steps["sequence"]))
-target_signal = target_signal.reshape((n_out, n_iter, group_size, steps["sequence"]))
+readout_signal = readout_signal.reshape((n_out, n_iter, batch_size, steps["sequence"]))
+target_signal = target_signal.reshape((n_out, n_iter, batch_size, steps["sequence"]))
 
 loss = 0.5 * np.mean(np.sum((readout_signal - target_signal) ** 2, axis=3), axis=(0, 2))
 

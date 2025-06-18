@@ -1,63 +1,67 @@
-import glob
-import os
-
 import nest
 import numpy as np
 import pandas as pd
-import yaml
+import json
+from pathlib import Path
 
 
 class Tools:
-    def __init__(self, parser):
-        self.parser = parser
-        self.args = parser.parse_args()
-        self.save_args()
+    def __init__(self, config, file_path):
+        self.config = config
+        self.load_config()
+        self.recordings_dir = Path(self.config["recordings_dir"])
+        self.save_config()
+        self.file_name = Path(file_path).name
         self.remove_recordings()
-        self.timing_dict = {
-            "biological_time": 0.0,
-            "time_communicate_prepare": 0.0,
-            "time_construction_connect": 0.0,
-            "time_construction_create": 0.0,
-            "time_simulate": 0.0,
-        }
+        self.timing_dict = dict(
+            biological_time=0.0,
+            time_communicate_prepare=0.0,
+            time_construction_connect=0.0,
+            time_construction_create=0.0,
+            time_simulate=0.0,
+        )
+        self.loss = []
 
-    def save_args(self):
-        args_dict = vars(self.args)
+    def load_config(self):
+        with open("config.json") as f:
+            config_updated = json.load(f)
+            for k, v in config_updated.items():
+                self.config[k] = v
 
-        with open(f"{self.args.recordings_dir}/args.yaml", "w") as file:
-            yaml.dump(args_dict, file, default_flow_style=False)
+    def save_config(self):
+        with open(self.recordings_dir / "config.json", "w") as file:
+            json.dump(self.config, file)
 
     def remove_recordings(self):
-        for file in os.listdir(self.args.recordings_dir):
-            file_path = os.path.join(self.args.recordings_dir, file)
-            if os.path.isfile(file_path) and (file_path.endswith(".csv") or file_path.endswith(".dat")):
-                os.remove(file_path)
+        for file_path in self.recordings_dir.iterdir():
+            if file_path.is_file() and (file_path.suffix in [".csv", ".dat"]):
+                file_path.unlink()
 
     def constrain_weights(self, nrns_in, nrns_rec, nrns_out, params_syn_base, params_common_syn_eprop):
         weight_dicts = [
-            {
-                "nrns_pre": nrns_in,
-                "nrns_post": nrns_rec,
-                "constrain_sign": self.args.constrain_weights_sign_in,
-                "constrain_dale": self.args.constrain_weights_dale_in,
-            },
-            {
-                "nrns_pre": nrns_rec,
-                "nrns_post": nrns_rec,
-                "constrain_sign": self.args.constrain_weights_sign_rec,
-                "constrain_dale": self.args.constrain_weights_dale_rec,
-            },
-            {
-                "nrns_pre": nrns_rec,
-                "nrns_post": nrns_out,
-                "constrain_sign": self.args.constrain_weights_sign_out,
-                "constrain_dale": self.args.constrain_weights_dale_out,
-            },
+            dict(
+                nrns_pre=nrns_in,
+                nrns_post=nrns_rec,
+                constrain_sign=self.config["constrain_weights_sign_in"],
+                constrain_dale=self.config["constrain_weights_dale_in"],
+            ),
+            dict(
+                nrns_pre=nrns_rec,
+                nrns_post=nrns_rec,
+                constrain_sign=self.config["constrain_weights_sign_rec"],
+                constrain_dale=self.config["constrain_weights_dale_rec"],
+            ),
+            dict(
+                nrns_pre=nrns_rec,
+                nrns_post=nrns_out,
+                constrain_sign=self.config["constrain_weights_sign_out"],
+                constrain_dale=self.config["constrain_weights_dale_out"],
+            ),
         ]
 
         sign_dicts = [
-            {"Wmin": 0.0, "Wmax": 100.0},
-            {"Wmin": -100.0, "Wmax": 0.0},
+            dict(Wmin=0.0, Wmax=100.0),
+            dict(Wmin=-100.0, Wmax=0.0),
         ]
 
         pop_pre_arr = np.array([], dtype=int)
@@ -74,7 +78,7 @@ class Tools:
 
                 if weight_dict["constrain_dale"]:
                     source_unique = np.unique(conns_dict["source"])
-                    proportion_inh = 1.0 / (1.0 + self.args.exc_to_inh_ratio)
+                    proportion_inh = 1.0 / (1.0 + self.config["exc_to_inh_ratio"])
                     sources_inh = np.random.choice(
                         source_unique, int(len(source_unique) * proportion_inh), replace=False
                     )
@@ -116,14 +120,14 @@ class Tools:
     def set_synapse_defaults(self, eta):
         for synapse_model in nest.synapse_models:
             if synapse_model.startswith("eprop_synapse"):
-                nest.SetDefaults(synapse_model, {"optimizer": {"eta": eta}})
+                nest.SetDefaults(synapse_model, dict(optimizer=dict(eta=eta)))
 
     def save_weights_snapshots(self, weights_dict_pre, weights_dict_post):
         for phase, weights_dict in zip(["pre", "post"], [weights_dict_pre, weights_dict_post]):
             for k, v in weights_dict.items():
                 label = f"{phase}_train_{k}"
                 v_ = {k: v[k] for k in v.keys() if k != "weight_matrix"}
-                pd.DataFrame.from_dict(v_).to_csv(f"{self.args.recordings_dir}/weights_{label}.csv", index=False)
+                pd.DataFrame.from_dict(v_).to_csv(self.recordings_dir / f"weights_{label}.csv", index=False)
 
     def save_weight_recordings(self, sender_nrns, target_nrns, df, label, recorder_label):
         sender_min = min(sender_nrns.tolist())
@@ -138,13 +142,13 @@ class Tools:
 
         if label != "":
             label = f"_{label}"
-        df_sub.to_csv(f"{self.args.recordings_dir}/{recorder_label}{label}.csv", index=False)
+        df_sub.to_csv(self.recordings_dir / f"{recorder_label}{label}.csv", index=False)
 
     def process_recordings(self, duration, nrns_in, nrns_rec, nrns_out):
         recorder_labels = ["multimeter_out"]
-        if self.args.record_dynamics:
+        if self.config["record_dynamics"]:
             recorder_labels += ["spike_recorder_in", "weight_recorder"]
-            if "evidence" in self.parser.prog:
+            if "evidence" in self.file_name:
                 nrn_types = ["reg", "ad"]
             else:
                 nrn_types = ["rec"]
@@ -152,20 +156,19 @@ class Tools:
                 recorder_labels.extend([f"multimeter_{nrn_type}", f"spike_recorder_{nrn_type}"])
 
         for recorder_label in recorder_labels:
-            save_file = f"{self.args.recordings_dir}/{recorder_label}"
-
-            file_names = sorted(glob.glob(f"{save_file}*.dat"))
+            file_names = sorted(self.recordings_dir.glob(f"{recorder_label}*.dat"))
 
             dfs = []
 
-            if os.path.exists(f"{save_file}.csv"):
-                dfs.append(pd.read_csv(f"{save_file}.csv"))
+            df_file = self.recordings_dir / f"{recorder_label}.csv"
+            if df_file.is_file():
+                dfs.append(pd.read_csv(df_file, engine="c"))
 
             for fname in file_names:
-                df_new = pd.read_csv(f"{fname}", skiprows=2, sep="\t")
+                df_new = pd.read_csv(fname, skiprows=2, sep="\t", engine="c")
                 if not df_new.empty:
                     dfs.append(df_new)
-                os.remove(fname)
+                    # fname.unlink()
 
             if not dfs:
                 df = df_new
@@ -181,7 +184,7 @@ class Tools:
                 self.save_weight_recordings(nrns_rec, nrns_out, df, "out", recorder_label)
 
             else:
-                df.to_csv(f"{save_file}.csv", index=False)
+                df.to_csv(df_file, index=False)
 
                 if "task" in duration.keys():
                     t_margin = 50.0  # ms, record a bit into the next / previous iteration
@@ -191,9 +194,23 @@ class Tools:
                     condition_last_iteration = df.time_ms >= duration["task"] - duration["sequence"] - t_margin
 
                     df_subset = df[condition_first_iteration | condition_last_iteration]
-                    df_subset.to_csv(f"{save_file}_subset.csv", index=False)
+                    df_subset.to_csv(self.recordings_dir / f"{recorder_label}_subset.csv", index=False)
 
-    def process_timing(self, kernel_status):
+    def get_events(self, prefix, save=False):
+        data_list = []
+        for f in sorted(self.recordings_dir.glob(f"*{prefix}*.dat")):
+            data = pd.read_csv(f, delimiter="\t", comment="#", engine="c")
+            if not data.empty:
+                data_list.append(data)
+        events_mm_out = pd.concat(data_list, ignore_index=True)
+        if save:
+            events_mm_out.to_csv(self.recordings_dir / "multimeter_out.csv", index=False)
+        return events_mm_out
+
+    def get_results(self):
+        return pd.read_csv(self.recordings_dir / "learning_performance.csv", engine="c")
+
+    def save_timing(self, kernel_status):
         for k in self.timing_dict.keys():
             v = kernel_status[k]
             if k == "time_simulate":
@@ -201,52 +218,55 @@ class Tools:
             else:
                 self.timing_dict[k] = v
 
-    def get_events(self, label):
-        df = pd.read_csv(f"{self.args.recordings_dir}/{label}.csv")
-
-        events = {}
-        for k in df.columns:
-            values = np.array(df[k])
-            if k == "sender":
-                k = "senders"
-            elif k == "time_ms":
-                k = "times"
-            events[k] = values
-        return events
-
-    def save_performance(self, performance_dict):
         timing_dict_final = {}
         for k, v in self.timing_dict.items():
             if k == "biological_time":
                 v /= 1000.0  # convert from ms to s
             timing_dict_final[f"{k}_s"] = [v]
 
-        pd.DataFrame.from_dict(timing_dict_final).to_csv(f"{self.args.recordings_dir}/timing.csv", index=False)
+        pd.DataFrame.from_dict(timing_dict_final).to_csv(self.recordings_dir / "timing.csv", index=False)
+    def save_phase(self, phase_label, n_iter):
+        with open(self.recordings_dir / "phases.dat", "a") as f:
+            f.write(f"{phase_label},{n_iter}\n")
 
-        self.loss = performance_dict["loss"]
-        pd.DataFrame.from_dict(performance_dict).to_csv(
-            f"{self.args.recordings_dir}/learning_performance.csv", index=False
-        )
+    def save_performance(self, save, loss, errors):
+        if save:
+            df = pd.read_csv(self.recordings_dir / "phases.dat", names=["phase", "repetition"], engine="c")
+            labels = np.repeat(df.phase.values, df.repetition.values).tolist()
+            pd.DataFrame(dict(
+                iteration=np.arange(len(loss)),
+                loss=loss,
+                error=errors,
+                label=labels,
+                )
+            ).to_csv(self.recordings_dir / "learning_performance.csv", index=False)
 
     def verify(self):
-        file_name = self.parser.prog
-        if file_name == "eprop_supervised_classification_evidence-accumulation_bsshslm_2020.py":
+        # print(self.file_name)
+        # for l in self.loss:
+        #     print(f"{l:.14f},")
+        # exit()
+        loss = np.array(self.loss)
+
+        if self.file_name == "eprop_supervised_classification_evidence-accumulation_bsshslm_2020.py":
             loss_reference = [
                 0.74115255000619,
                 0.74038818770074,
                 0.66578523317777,
                 0.66364419332299,
                 0.72942896284495,
+                0.65825443888416,
             ]
-        elif file_name == "eprop_supervised_classification_evidence-accumulation.py":
+        elif self.file_name == "eprop_supervised_classification_evidence-accumulation.py":
             loss_reference = [
                 34.58427289782617,
                 36.87835068653019,
                 28.89970643558962,
                 31.60581680525203,
-                36.76570075434138,
+                36.76571948680768,
+                29.90618754038629,
             ]
-        elif file_name == "eprop_supervised_regression_sine-waves_bsshslm_2020.py":
+        elif self.file_name == "eprop_supervised_regression_sine-waves_bsshslm_2020.py":
             loss_reference = [
                 101.96435699904158,
                 103.46673112620579,
@@ -254,7 +274,7 @@ class Tools:
                 103.68024403768638,
                 104.41277574875247,
             ]
-        elif file_name == "eprop_supervised_regression_sine-waves.py":
+        elif self.file_name == "eprop_supervised_regression_sine-waves.py":
             loss_reference = [
                 107.73732072362752,
                 106.42253313316886,
@@ -262,23 +282,25 @@ class Tools:
                 108.10839027499375,
                 107.76400611943626,
             ]
-        elif file_name == "eprop_supervised_classification_neuromorphic_mnist.py":
+        elif self.file_name == "eprop_supervised_classification_neuromorphic_mnist.py":
             loss_reference = [
-                0.49542706632114,
-                0.51359011586924,
-                0.52512156851762,
-                0.50372645195962,
-                0.45187380644716,
+                0.49569090581695,
+                0.52751321436889,
+                0.51467659566501,
+                0.50595422166446,
+                0.50532549825770,
+                0.49938869752847,
             ]
-        elif file_name == "eprop_supervised_classification_neuromorphic_mnist_bsshslm_2020.py":
+        elif self.file_name == "eprop_supervised_classification_neuromorphic_mnist_bsshslm_2020.py":
             loss_reference = [
-                2.29786665381485,
-                2.31976362544488,
-                2.33485928474764,
-                2.30052887965964,
-                2.27399250538698,
+                2.29926915739071,
+                2.30735389920452,
+                2.31229167547814,
+                2.30398946726470,
+                2.30571008112245,
+                2.30277356036807,
             ]
-        elif file_name == "eprop_supervised_regression_lemniscate_bsshslm_2020.py":
+        elif self.file_name == "eprop_supervised_regression_lemniscate_bsshslm_2020.py":
             loss_reference = [
                 314.30442538643001,
                 313.84127193622919,
@@ -286,7 +308,7 @@ class Tools:
                 310.66410755892281,
                 309.19353500432857,
             ]
-        elif file_name == "eprop_supervised_regression_handwriting_bsshslm_2020.py":
+        elif self.file_name == "eprop_supervised_regression_handwriting_bsshslm_2020.py":
             loss_reference = [
                 91.40191610510351,
                 90.53583357361666,
@@ -295,19 +317,14 @@ class Tools:
                 86.98770239575573,
             ]
 
-        n_compare = min(len(self.loss), len(loss_reference))
-        verification_successful = np.allclose(self.loss[:n_compare], loss_reference[:n_compare], atol=1e-14)
+        n_compare = min(len(loss), len(loss_reference))
+        verification_successful = np.allclose(loss[:n_compare], loss_reference[:n_compare], atol=1e-14, rtol=0)
 
         if not verification_successful:
-            print("loss:")
-            for l in self.loss[:n_compare]:
-                print(f"    {l:.14f},")
-
-            print("\nreference loss:")
-            for l in loss_reference[:n_compare]:
-                print(f"    {l:.14f},")
-
-            print("\nloss - reference loss:")
-            for l, lr in zip(self.loss[:n_compare], loss_reference[:n_compare]):
-                print(f"    {l-lr:.14f},")
+            deviation_idc = np.where(loss[:n_compare] != loss_reference[:n_compare])[0]
+            for deviation_idx in deviation_idc:
+                print(f"{deviation_idx}. iteration")
+                print(f"{loss[deviation_idx]:.16f} loss")
+                print(f"{loss_reference[deviation_idx]:.16f} reference loss")
+                print(f"{loss[deviation_idx]-loss_reference[deviation_idx]:.16f} delta")
         print(verification_successful)

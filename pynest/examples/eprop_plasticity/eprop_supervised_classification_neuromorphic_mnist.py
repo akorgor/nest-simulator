@@ -75,18 +75,16 @@ References
 # ~~~~~~~~~~~~~~~~
 # We begin by importing all libraries required for the simulation, analysis, and visualization.
 
-import argparse
-import os
-import zipfile
-
+from IPython.display import Image
+from cycler import cycler
+from pathlib import Path
+from toolbox import Tools
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import nest
 import numpy as np
 import requests
-from cycler import cycler
-from IPython.display import Image
-from toolbox import Tools
+import zipfile
 
 # %% ###########################################################################################################
 # Schematic of network architecture
@@ -104,40 +102,46 @@ except Exception:
 # Setup
 # ~~~~~
 
-parser = argparse.ArgumentParser()
+config = dict(
+    batch_size=1,
+    blocklist_dir="./",
+    c_reg=2.0,
+    c_reg_delta=100.0,
+    constrain_weights_dale_in=False,
+    constrain_weights_dale_out=False,
+    constrain_weights_dale_rec=False,
+    constrain_weights_sign_in=False,
+    constrain_weights_sign_out=False,
+    constrain_weights_sign_rec=False,
+    cpus_per_task=1,
+    cutoff=100,
+    dataset_dir="./",
+    do_early_stopping=False,
+    eta=5e-3,
+    exc_to_inh_ratio=1.0,
+    learning_window=10,
+    kappa=0.97,
+    kappa_reg=0.99,
+    model_nrn_rec="eprop_iaf",
+    n_iter_test=1,
+    n_iter_train=5,
+    n_iter_validate_every=10,
+    nodes=1,
+    ntasks_per_node=1,
+    record_dynamics=True,
+    recordings_dir="./",
+    seed=1,
+    sparsity=True,
+    surrogate_gradient="piecewise_linear",
+    surrogate_gradient_beta=1.7,
+    surrogate_gradient_gamma=0.5,
+)
 
-parser.add_argument("--blocklist_dir", type=str, default="./")
-parser.add_argument("--constrain_weights_sign_in", action=argparse.BooleanOptionalAction, default=False)
-parser.add_argument("--constrain_weights_sign_rec", action=argparse.BooleanOptionalAction, default=False)
-parser.add_argument("--constrain_weights_sign_out", action=argparse.BooleanOptionalAction, default=False)
-parser.add_argument("--constrain_weights_dale_in", action=argparse.BooleanOptionalAction, default=False)
-parser.add_argument("--constrain_weights_dale_rec", action=argparse.BooleanOptionalAction, default=False)
-parser.add_argument("--constrain_weights_dale_out", action=argparse.BooleanOptionalAction, default=False)
-parser.add_argument("--c_reg", type=float, default=2.0)
-parser.add_argument("--c_reg_delta", type=float, default=100.0)
-parser.add_argument("--cutoff", type=int, default=100)
-parser.add_argument("--dataset_dir", type=str, default="./")
-parser.add_argument("--eta", type=float, default=5e-3)
-parser.add_argument("--exc_to_inh_ratio", type=float, default=1.0)
-parser.add_argument("--group_size", type=int, default=1)
-parser.add_argument("--kappa", type=float, default=0.97)
-parser.add_argument("--kappa_reg", type=float, default=0.99)
-parser.add_argument("--n_iter_train", type=int, default=5)
-parser.add_argument("--n_iter_test", type=int, default=0)
-parser.add_argument("--nvp", type=int, default=1)
-parser.add_argument("--record_dynamics", action=argparse.BooleanOptionalAction, default=True)
-parser.add_argument("--recordings_dir", type=str, default="./")
-parser.add_argument("--seed", type=int, default=1)
-parser.add_argument("--sparsity", action=argparse.BooleanOptionalAction, default=True)
-parser.add_argument("--surrogate_gradient", type=str.lower, default="piecewise_linear")
-parser.add_argument("--surrogate_gradient_beta", type=float, default=1.7)
-parser.add_argument("--surrogate_gradient_gamma", type=float, default=0.5)
-parser.add_argument("--model_nrn_rec", type=str.lower, default="eprop_iaf")
-parser.add_argument("--do_early_stopping", action=argparse.BooleanOptionalAction, default=False)
+tools = Tools(config, __file__)
+config = tools.config
 
-args = parser.parse_args()
-
-tools = Tools(parser)
+local_num_threads = config["cpus_per_task"]
+total_num_virtual_procs = config["nodes"] * config["ntasks_per_node"] * local_num_threads
 
 # %% ###########################################################################################################
 # Initialize random generator
@@ -145,7 +149,7 @@ tools = Tools(parser)
 # We seed the numpy random generator, which will generate random initial weights as well as random input and
 # output.
 
-rng_seed = args.seed  # numpy random seed
+rng_seed = config["seed"]  # numpy random seed
 np.random.seed(rng_seed)  # fix numpy random seed
 
 # %% ###########################################################################################################
@@ -153,24 +157,25 @@ np.random.seed(rng_seed)  # fix numpy random seed
 # .....................
 # The task's temporal structure is then defined, once as time steps and once as durations in milliseconds.
 # Even though each sample is processed independently during training, we aggregate predictions and true
-# labels across a group of samples during the evaluation phase. The number of samples in this group is
-# determined by the `group_size` parameter. This data is then used to assess the neural network's
+# labels across a batch of samples during the evaluation phase. The number of samples in this batch is
+# determined by the `batch_size` parameter. This data is then used to assess the neural network's
 # performance metrics, such as average accuracy and mean error. Increasing the number of iterations enhances
 # learning performance up to the point where overfitting occurs. If early stopping is enabled, the
 # classification error is tested in regular intervals and the training stopped as soon as the error selected as
 # stop criterion is reached. After training, the performance can be tested over a number of test iterations.
 
-group_size = args.group_size  # number of instances over which to evaluate the learning performance, 100 for convergence
-n_iter_train = args.n_iter_train  # number of training iterations, 200 for convergence
-n_iter_test = args.n_iter_test  # number of iterations for final test
-do_early_stopping = args.do_early_stopping  # if True, stop training as soon as stop criterion fulfilled
-n_iter_validate_every = 10  # number of training iterations before validation
+batch_size = config["batch_size"]  # number of instances over which to evaluate the learning performance, 100 for convergence
+n_iter_train = config["n_iter_train"]  # number of training iterations, 200 for convergence
+n_iter_test = config["n_iter_test"]  # number of iterations for final test
+do_early_stopping = config["do_early_stopping"]  # if True, stop training as soon as stop criterion fulfilled
+n_iter_validate_every = config["n_iter_validate_every"]  # number of training iterations before validation
+n_iter_validate = 1  # number of validation iterations to average over
 n_iter_early_stop = 8  # number of iterations to average over to evaluate early stopping condition
 stop_crit = 0.07  # error value corresponding to stop criterion for early stopping
 
 steps = {
     "sequence": 300,  # time steps of one full sequence
-    "learning_window": 10,  # time steps of window with non-zero learning signals
+    "learning_window": config["learning_window"],  # time steps of window with non-zero learning signals
 }
 
 steps.update(
@@ -199,9 +204,10 @@ duration.update({key: value * duration["step"] for key, value in steps.items()})
 params_setup = {
     "print_time": False,  # if True, print time progress bar during simulation, set False if run as code cell
     "resolution": duration["step"],
-    "total_num_virtual_procs": args.nvp,  # number of virtual processes, set in case of distributed computing
+    "total_num_virtual_procs": total_num_virtual_procs,  # number of virtual processes, set in case of distributed computing
+    "local_num_threads": local_num_threads,
     "overwrite_files": True,  # if True, overwrite existing files
-    "data_path": f"{args.recordings_dir}",  # path to save data to
+    "data_path": f"{config["recordings_dir"]}",  # path to save data to
 }
 
 ####################
@@ -221,7 +227,7 @@ nest.set_verbosity("M_FATAL")
 # pixels. By omitting Poisson generators for pixels on this blocklist, we effectively reduce the total number of
 # input neurons and Poisson generators required, optimizing the network's resource usage.
 
-pixels_blocklist = np.loadtxt(os.path.join(args.blocklist_dir, "NMNIST_pixels_blocklist.txt"))
+pixels_blocklist = np.loadtxt(Path(config["blocklist_dir"]) / "NMNIST_pixels_blocklist.txt")
 
 pixels_dict = {
     "n_x": 34,  # number of pixels in horizontal direction
@@ -240,24 +246,24 @@ n_out = 10  # number of readout neurons
 params_nrn_out = {
     "C_m": 1.0,  # pF, membrane capacitance - takes effect only if neurons get current input (here not the case)
     "E_L": 0.0,  # mV, leak / resting membrane potential
-    "eprop_isi_trace_cutoff": args.cutoff,  # cutoff of integration of eprop trace between spikes
+    "eprop_isi_trace_cutoff": config["cutoff"],  # cutoff of integration of eprop trace between spikes
     "I_e": 0.0,  # pA, external current input
     "tau_m": 100.0,  # ms, membrane time constant
     "V_m": 0.0,  # mV, initial value of the membrane voltage
 }
 
 params_nrn_rec = {
-    "beta": args.surrogate_gradient_beta,  # width scaling of the pseudo-derivative
+    "beta": config["surrogate_gradient_beta"],  # width scaling of the pseudo-derivative
     "C_m": 1.0,
-    "c_reg": args.c_reg / duration["sequence"],  # coefficient of firing rate regularization
+    "c_reg": config["c_reg"] / duration["sequence"],  # coefficient of firing rate regularization
     "E_L": 0.0,
-    "eprop_isi_trace_cutoff": args.cutoff,
+    "eprop_isi_trace_cutoff": config["cutoff"],
     "f_target": 10.0,  # spikes/s, target firing rate for firing rate regularization
-    "gamma": args.surrogate_gradient_gamma,  # height scaling of the pseudo-derivative
+    "gamma": config["surrogate_gradient_gamma"],  # height scaling of the pseudo-derivative
     "I_e": 0.0,
-    "kappa": args.kappa,  # low-pass filter of the eligibility trace
-    "kappa_reg": args.kappa_reg,  # low-pass filter of the firing rate for regularization
-    "surrogate_gradient_function": args.surrogate_gradient,  # surrogate gradient / pseudo-derivative function
+    "kappa": config["kappa"],  # low-pass filter of the eligibility trace
+    "kappa_reg": config["kappa_reg"],  # low-pass filter of the firing rate for regularization
+    "surrogate_gradient_function": config["surrogate_gradient"],  # surrogate gradient / pseudo-derivative function
     "t_ref": 0.0,  # ms, duration of refractory period
     "tau_m": 10.0,
     "V_m": 0.0,
@@ -267,12 +273,12 @@ params_nrn_rec = {
 scale_factor = 1.0 - params_nrn_rec["kappa"]  # factor for rescaling due to removal of irregular spike arrival
 params_nrn_rec["c_reg"] /= scale_factor**2
 
-if args.model_nrn_rec == "eprop_iaf_adapt":
+if config["model_nrn_rec"] == "eprop_iaf_adapt":
     params_nrn_rec["adapt_beta"] = 0.0  # adaptation scaling
 
-if args.model_nrn_rec in ["eprop_iaf_psc_delta", "eprop_iaf_psc_delta_adapt"]:
+if config["model_nrn_rec"] in ["eprop_iaf_psc_delta", "eprop_iaf_psc_delta_adapt"]:
     params_nrn_rec["V_reset"] = -0.5  # mV, reset membrane voltage
-    params_nrn_rec["c_reg"] = args.c_reg_delta / duration["sequence"] / scale_factor**2
+    params_nrn_rec["c_reg"] = config["c_reg_delta"] / duration["sequence"] / scale_factor**2
     params_nrn_rec["V_th"] = 0.5
 
 ####################
@@ -283,7 +289,7 @@ if args.model_nrn_rec in ["eprop_iaf_psc_delta", "eprop_iaf_psc_delta_adapt"]:
 gen_spk_in = nest.Create("spike_generator", n_in)
 nrns_in = nest.Create("parrot_neuron", n_in)
 
-nrns_rec = nest.Create(args.model_nrn_rec, n_rec, params_nrn_rec)
+nrns_rec = nest.Create(config["model_nrn_rec"], n_rec, params_nrn_rec)
 nrns_out = nest.Create("eprop_readout", n_out, params_nrn_out)
 gen_rate_target = nest.Create("step_rate_generator", n_out)
 gen_learning_window = nest.Create("step_rate_generator")
@@ -339,7 +345,7 @@ for params in [params_mm_rec, params_mm_out, params_wr, params_sr_in, params_sr_
 
 ####################
 
-if args.record_dynamics:
+if config["record_dynamics"]:
     params_mm_out["record_from"] += ["V_m", "error_signal"]
 
     mm_rec = nest.Create("multimeter", params_mm_rec)
@@ -382,7 +388,7 @@ np.fill_diagonal(weights_rec_rec, 0.0)  # since no autapses set corresponding we
 weights_rec_out = np.array(calculate_glorot_dist(n_rec, n_out).T) * scale_factor
 weights_out_rec = np.array(np.random.randn(n_rec, n_out)) / scale_factor
 
-if args.sparsity:
+if config["sparsity"]:
 
     def create_mask(weights, sparsity_level):
         return np.random.choice([0, 1], weights.shape, p=[sparsity_level, 1 - sparsity_level])
@@ -405,7 +411,7 @@ if args.sparsity:
     senders_rec_rec, targets_rec_rec = get_weight_recorder_senders_targets(weights_rec_rec, nrns_rec, nrns_rec)
     senders_rec_out, targets_rec_out = get_weight_recorder_senders_targets(weights_rec_out, nrns_rec, nrns_out)
 
-    if args.record_dynamics:
+    if config["record_dynamics"]:
         params_wr["senders"] = np.unique(np.concatenate([senders_in_rec, senders_rec_rec, senders_rec_out]))
         params_wr["targets"] = np.unique(np.concatenate([targets_in_rec, targets_rec_rec, targets_rec_out]))
 
@@ -423,9 +429,9 @@ params_common_syn_eprop = {
 }
 
 eta_test = 0.0  # learning rate for test phase
-eta_train = args.eta * scale_factor**2  # learning rate for training phase
+eta_train = config["eta"] * scale_factor**2  # learning rate for training phase
 
-if args.record_dynamics:
+if config["record_dynamics"]:
     params_common_syn_eprop["weight_recorder"] = wr
 
 params_syn_base = {
@@ -466,7 +472,7 @@ nest.SetDefaults("eprop_synapse", params_common_syn_eprop)
 
 nest.Connect(gen_spk_in, nrns_in, params_conn_one_to_one, params_syn_static)  # connection 1
 
-if args.sparsity:
+if config["sparsity"]:
 
     def sparsely_connect(weights, params_syn, nrns_pre, nrns_post):
         targets, sources = np.where(weights)
@@ -488,7 +494,7 @@ nest.Connect(nrns_out, nrns_rec, params_conn_all_to_all, params_syn_feedback)  #
 nest.Connect(gen_rate_target, nrns_out, params_conn_one_to_one, params_syn_rate_target)  # connection 6
 nest.Connect(gen_learning_window, nrns_out, params_conn_all_to_all, params_syn_learning_window)  # connection 7
 
-if args.record_dynamics:
+if config["record_dynamics"]:
     nest.Connect(nrns_in, sr_in, params_conn_all_to_all, params_syn_static)
     nest.Connect(nrns_rec, sr_rec, params_conn_all_to_all, params_syn_static)
 
@@ -528,25 +534,26 @@ def unzip(zip_file_path, extraction_path):
     print(f"Extracting {zip_file_path}.")
     with zipfile.ZipFile(zip_file_path, "r") as zip_file:
         zip_file.extractall(extraction_path)
-    os.remove(zip_file_path)
+    zip_file_path.unlink()
 
 
 def download_and_extract_nmnist_dataset(save_path="./"):
-    nmnist_dataset = {
-        "url": "https://prod-dcd-datasets-cache-zipfiles.s3.eu-west-1.amazonaws.com/468j46mzdv-1.zip",
-        "directory": "468j46mzdv-1",
-        "zip": "dataset.zip",
-    }
+    nmnist_dataset = dict(
+        url="https://prod-dcd-datasets-cache-zipfiles.s3.eu-west-1.amazonaws.com/468j46mzdv-1.zip",
+        directory="468j46mzdv-1",
+        zip="dataset.zip",
+    )
 
-    path = os.path.join(save_path, nmnist_dataset["directory"])
+    save_path = Path(save_path)
+    path = save_path / nmnist_dataset["directory"]
 
-    train_path = os.path.join(path, "Train")
-    test_path = os.path.join(path, "Test")
+    train_path = path / "Train"
+    test_path = path / "Test"
 
-    downloaded_zip_path = os.path.join(save_path, nmnist_dataset["zip"])
+    downloaded_zip_path = save_path / nmnist_dataset["zip"]
 
-    if not (os.path.exists(path) and os.path.exists(train_path) and os.path.exists(test_path)):
-        if not os.path.exists(downloaded_zip_path):
+    if not (path.exists() and train_path.exists() and test_path.exists()):
+        if not downloaded_zip_path.exists():
             print("\nDownloading the N-MNIST dataset.")
             response = requests.get(nmnist_dataset["url"], timeout=10)
             with open(downloaded_zip_path, "wb") as file:
@@ -580,96 +587,94 @@ def load_image(file_path, pixels_dict):
 
 
 class DataLoader:
-    def __init__(self, path, selected_labels, group_size, pixels_dict):
-        self.path = path
+    def __init__(self, path, selected_labels, batch_size, pixels_dict):
+        self.path = Path(path)
         self.selected_labels = selected_labels
-        self.group_size = group_size
+        self.batch_size = batch_size
         self.pixels_dict = pixels_dict
 
         self.current_index = 0
-        self.all_sample_paths, self.all_labels = self.get_all_sample_paths_with_labels()
+        self.set_all_sample_paths_with_labels()
         self.n_all_samples = len(self.all_sample_paths)
         self.shuffled_indices = np.random.permutation(self.n_all_samples)
 
-    def get_all_sample_paths_with_labels(self):
-        all_sample_paths = []
-        all_labels = []
+    def set_all_sample_paths_with_labels(self):
+        self.all_sample_paths = []
+        self.all_labels = []
 
         for label in self.selected_labels:
-            label_dir_path = os.path.join(self.path, str(label))
-            all_files = sorted(os.listdir(label_dir_path))
+            for sample in sorted((self.path / str(label)).iterdir()):
+                self.all_sample_paths.append(sample.absolute())
+                self.all_labels.append(label)
 
-            for sample in all_files:
-                all_sample_paths.append(os.path.join(label_dir_path, sample))
-                all_labels.append(label)
-
-        return all_sample_paths, all_labels
-
-    def get_new_evaluation_group(self):
-        end_index = self.current_index + self.group_size
+    def get_new_evaluation_batch(self):
+        end_index = self.current_index + self.batch_size
 
         selected_indices = np.take(self.shuffled_indices, range(self.current_index, end_index), mode="wrap")
 
-        self.current_index = (self.current_index + self.group_size) % self.n_all_samples
+        self.current_index = (self.current_index + self.batch_size) % self.n_all_samples
 
-        images_group = [load_image(self.all_sample_paths[i], self.pixels_dict) for i in selected_indices]
-        labels_group = [self.all_labels[i] for i in selected_indices]
+        images_batch = [load_image(self.all_sample_paths[i], self.pixels_dict) for i in selected_indices]
+        labels_batch = [self.all_labels[i] for i in selected_indices]
 
-        return images_group, labels_group
+        return images_batch, labels_batch
 
 
-def get_params_task_input_output(n_iter_interval, loader):
-    input_group, target_group = loader.get_new_evaluation_group()
+def get_params_task_input_output(n_iter_interval, n_iter_curr, loader):
+    iteration_offset = n_iter_interval * batch_size * duration["sequence"]
 
     spike_times = [[] for _ in range(n_in)]
 
-    iteration_offset = n_iter_interval * group_size * duration["sequence"]
 
     params_gen_rate_target = [
         {
-            "amplitude_times": np.arange(0.0, group_size * duration["sequence"], duration["sequence"])
+            "amplitude_times": np.arange(0.0, n_iter_curr * batch_size * duration["sequence"], duration["sequence"])
             + iteration_offset
             + duration["total_offset"],
-            "amplitude_values": np.zeros(group_size),
+            "amplitude_values": np.zeros(n_iter_curr * batch_size),
         }
         for _ in range(n_out)
     ]
 
-    for group_element in range(group_size):
-        params_gen_rate_target[target_group[group_element]]["amplitude_values"][group_element] = 1.0
+    for i in range(n_iter_curr):
+        input_batch, target_batch = loader.get_new_evaluation_batch()
+        for batch_element in range(batch_size):
+            params_gen_rate_target[target_batch[batch_element]]["amplitude_values"][i*batch_size + batch_element] = 1.0
 
-        for n, relative_times in enumerate(input_group[group_element]):
-            if len(relative_times) > 0:
-                relative_times = np.array(relative_times)
+            for n, relative_times in enumerate(input_batch[batch_element]):
+                if len(relative_times) > 0:
+                    relative_times = np.array(relative_times)
+                else:
+                    relative_times = np.array([100.0])
                 spike_times[n].extend(
-                    iteration_offset + group_element * duration["sequence"] + relative_times + duration["offset_gen"]
-                )
+                        iteration_offset + (i*batch_size + batch_element) * duration["sequence"] + relative_times + duration["offset_gen"]
+                    )
+
+    params_gen_spk_in = [{"spike_times": spk_times} for spk_times in spike_times]
 
     params_gen_learning_window = {
         "amplitude_times": np.hstack(
             [
                 np.array([0.0, duration["sequence"] - duration["learning_window"]])
                 + iteration_offset
-                + group_element * duration["sequence"]
+                + batch_element * duration["sequence"]
                 + duration["total_offset"]
-                for group_element in range(group_size)
+                for batch_element in range(n_iter_curr * batch_size)
             ]
         ),
-        "amplitude_values": np.tile([0.0, 1.0], group_size),
+        "amplitude_values": np.tile([0.0, 1.0], n_iter_curr * batch_size),
     }
-
-    params_gen_spk_in = [{"spike_times": spk_times} for spk_times in spike_times]
 
     return params_gen_spk_in, params_gen_rate_target, params_gen_learning_window
 
 
-save_path = args.dataset_dir  # path to save the N-MNIST dataset to
+save_path = config["dataset_dir"]  # path to save the N-MNIST dataset to
 train_path, test_path = download_and_extract_nmnist_dataset(save_path)
 
 selected_labels = [label for label in range(n_out)]
 
-data_loader_train = DataLoader(train_path, selected_labels, group_size, pixels_dict)
-data_loader_test = DataLoader(test_path, selected_labels, group_size, pixels_dict)
+data_loader_train = DataLoader(train_path, selected_labels, batch_size, pixels_dict)
+data_loader_test = DataLoader(test_path, selected_labels, batch_size, pixels_dict)
 
 # %% ###########################################################################################################
 # Force final update
@@ -701,7 +706,7 @@ def get_weights(pop_pre, pop_post):
     return conns
 
 
-if args.record_dynamics:
+if config["record_dynamics"]:
     weights_pre_train = {
         "in_rec": get_weights(nrns_in, nrns_rec),
         "rec_rec": get_weights(nrns_rec, nrns_rec),
@@ -722,35 +727,25 @@ if args.record_dynamics:
 
 class TrainingPipeline:
     def __init__(self):
-        self.results_dict = {
-            "error": [],
-            "loss": [],
-            "iteration": [],
-            "label": [],
-        }
         self.n_iter_sim = 0
         self.phase_label_previous = ""
         self.error = 0
         self.k_iter = 0
         self.early_stop = False
+        self.evaluate_curr = False
 
-    def evaluate(self, n_iteration=1):
-        events_mm_out = tools.get_events("multimeter_out")
+    def evaluate(self, prefix="", save=False):
+        events_mm_out = tools.get_events(f"{prefix}*multimeter_out*", save)
 
-        readout_signal = events_mm_out["readout_signal"]
-        target_signal = events_mm_out["target_signal"]
-        senders = events_mm_out["senders"]
-        times = events_mm_out["times"]
+        readout_signal = events_mm_out.readout_signal
+        target_signal = events_mm_out.target_signal
+        senders = events_mm_out.sender
 
-        cond1 = times > (self.n_iter_sim - n_iteration) * group_size * duration["sequence"] + duration["total_offset"]
-        cond2 = times <= self.n_iter_sim * group_size * duration["sequence"] + duration["total_offset"]
-        idc = cond1 & cond2
+        readout_signal = np.array([readout_signal[senders == i] for i in set(senders)])
+        target_signal = np.array([target_signal[senders == i] for i in set(senders)])
 
-        readout_signal = np.array([readout_signal[idc][senders[idc] == i] for i in set(senders)])
-        target_signal = np.array([target_signal[idc][senders[idc] == i] for i in set(senders)])
-
-        readout_signal = readout_signal.reshape((n_out, n_iteration, group_size, steps["sequence"]))
-        target_signal = target_signal.reshape((n_out, n_iteration, group_size, steps["sequence"]))
+        readout_signal = readout_signal.reshape((n_out, -1, batch_size, steps["sequence"]))
+        target_signal = target_signal.reshape((n_out, -1, batch_size, steps["sequence"]))
 
         readout_signal = readout_signal[:, :, :, -steps["learning_window"] :]
         target_signal = target_signal[:, :, :, -steps["learning_window"] :]
@@ -762,92 +757,70 @@ class TrainingPipeline:
         accuracy = np.mean((y_target == y_prediction), axis=1)
         errors = 1.0 - accuracy
 
-        self.results_dict["iteration"].extend(range(self.n_iter_sim - n_iteration, self.n_iter_sim))
-        self.results_dict["error"].extend(errors)
-        self.results_dict["loss"].extend(loss)
-        self.results_dict["label"].extend([self.phase_label_previous for _ in range(n_iteration)])
+        self.error = np.mean(errors)
+        tools.loss.extend(loss.tolist())
+        tools.save_performance(save, loss, errors)
 
-        self.error = errors[0]
-
-    def run_phase(self, phase_label, eta, loader):
+    def run_phase(self, phase_label, eta, n_iter, loader, evaluate=False):
         tools.set_synapse_defaults(eta)
 
-        params_gen_spk_in, params_gen_rate_target, params_gen_learning_window = get_params_task_input_output(
-            self.n_iter_sim, loader
-        )
+        params_gen_spk_in, params_gen_rate_target, params_gen_learning_window = get_params_task_input_output(self.n_iter_sim, n_iter, loader)
         nest.SetStatus(gen_spk_in, params_gen_spk_in)
         nest.SetStatus(gen_rate_target, params_gen_rate_target)
         nest.SetStatus(gen_learning_window, params_gen_learning_window)
 
-        self.simulate("total_offset")
-        self.simulate("extension_sim")
+        data_prefix = f"{nest.data_prefix[:-3]}_1_" if self.n_iter_sim > 0 else f"{self.n_iter_sim:05d}_offset_0_"
+        self.simulate(duration["total_offset"] + duration["extension_sim"], data_prefix)
 
-        duration["sim"] = group_size * duration["sequence"] - duration["total_offset"] - duration["extension_sim"]
-        self.simulate("sim")
+        if self.n_iter_sim > 0 and self.evaluate_curr:
+            self.evaluate(nest.data_prefix[:-3])
+        self.evaluate_curr = evaluate
 
-        self.n_iter_sim += 1
+        duration["sim"] = n_iter * batch_size * duration["sequence"]
+
+        if phase_label != "test":
+            duration["sim"] -= duration["total_offset"] + duration["extension_sim"]
+
+        self.simulate(duration["sim"], f"{(self.n_iter_sim+1):05d}_{phase_label}_0_")
+
+        tools.save_phase(phase_label, n_iter)
+
+        self.n_iter_sim += n_iter
         self.phase_label_previous = phase_label
 
-    def run_training(self):
-        self.run_phase("training", eta_train, data_loader_train)
-
-    def run_validation(self):
-        if do_early_stopping and self.k_iter % n_iter_validate_every == 0:
-            self.run_phase("validation", eta_test, data_loader_test)
-
-    def run_early_stopping(self):
-        if do_early_stopping and self.k_iter % n_iter_validate_every == 0:
-            if self.k_iter > 0 and self.error < stop_crit:
-                errors_early_stop = []
-                for _ in range(n_iter_early_stop):
-                    self.run_phase("early-stopping", eta_test, data_loader_test)
-                    errors_early_stop.append(self.error)
-
-                self.early_stop = np.mean(errors_early_stop) < stop_crit
-
-    def run_test(self):
-        for _ in range(n_iter_test):
-            self.run_phase("test", eta_test, data_loader_test)
-
-    def simulate(self, k):
-        nest.Run(duration[k])
+    def simulate(self, duration, data_prefix=''):
+        nest.data_prefix=data_prefix
+        nest.Simulate(duration)
 
     def run(self):
-        nest.Prepare()
-        while self.k_iter < n_iter_train and not self.early_stop:
-            self.run_validation()
-            self.run_early_stopping()
-            self.run_training()
-            self.k_iter += 1
+        if do_early_stopping:
+            for self.k_iter in np.arange(0, n_iter_train, n_iter_validate_every):
+                if do_early_stopping:
+                    self.run_phase("validation", eta_test, n_iter_validate, data_loader_test, evaluate=True)
+                    if self.k_iter > 0 and self.error < stop_crit:
+                        self.run_phase("early-stopping", eta_test, n_iter_early_stop, data_loader_test, evaluate=True)
+                        if self.error < stop_crit:
+                            break
+                self.run_phase("training", eta_train, n_iter_validate_every, data_loader_train)
+        else:
+            self.run_phase("training", eta_train, n_iter_train, data_loader_train)
 
-        self.run_test()
+        self.run_phase("test", eta_test, n_iter_test, data_loader_test)
 
-        self.simulate("total_offset")
-        self.simulate("extension_sim")
+    def evaluate_final(self):
+        self.evaluate(save=True)
 
-        duration["task"] = self.n_iter_sim * group_size * duration["sequence"] + duration["total_offset"]
-
-        tools.process_recordings(duration, nrns_in, nrns_rec, nrns_out)
-        tools.process_timing(nest.GetKernelStatus())
-
-        self.evaluate(self.n_iter_sim)
+        duration["task"] = self.n_iter_sim * batch_size * duration["sequence"] + duration["total_offset"]
 
         gen_spk_final_update.set({"spike_times": [duration["task"] + duration["extension_sim"] + 1]})
 
-        self.simulate("final_update")
-
-        nest.Cleanup()
-
-    def get_results(self):
-        for k, v in self.results_dict.items():
-            self.results_dict[k] = np.array(v)
-        return self.results_dict
-
+        self.simulate(duration["final_update"])
 
 training_pipeline = TrainingPipeline()
 training_pipeline.run()
+tools.save_timing(nest.GetKernelStatus())
+training_pipeline.evaluate_final()
 
-results_dict = training_pipeline.get_results()
 n_iter_sim = training_pipeline.n_iter_sim
 
 # %% ###########################################################################################################
@@ -855,7 +828,7 @@ n_iter_sim = training_pipeline.n_iter_sim
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # After the training, we can read out the optimized final weights.
 
-if args.record_dynamics:
+if config["record_dynamics"]:
     weights_post_train = {
         "in_rec": get_weights(nrns_in, nrns_rec),
         "rec_rec": get_weights(nrns_rec, nrns_rec),
@@ -867,18 +840,18 @@ if args.record_dynamics:
 # ~~~~~~~~~~~~~~~~~~
 # We can also retrieve the recorded history of the dynamic variables and weights, as well as detected spikes.
 
-if args.record_dynamics:
+if config["record_dynamics"]:
     tools.save_weights_snapshots(weights_pre_train, weights_post_train)
 
 events_mm_out = tools.get_events("multimeter_out")
 
-if args.record_dynamics:
+if config["record_dynamics"]:
     events_mm_rec = tools.get_events("multimeter_rec")
     events_sr_in = tools.get_events("spike_recorder_in")
     events_sr_rec = tools.get_events("spike_recorder_rec")
     events_wr = tools.get_events("weight_recorder")
 
-tools.save_performance(results_dict)
+results_dict = tools.get_results()
 tools.verify()
 
 # %% ###########################################################################################################
@@ -962,7 +935,7 @@ for title, xlims in zip(
     ["Dynamic variables before training", "Dynamic variables after training"],
     [
         (0, steps["sequence"]),
-        ((n_iter_sim - 1) * group_size * steps["sequence"], n_iter_sim * group_size * steps["sequence"]),
+        ((n_iter_sim - 1) * batch_size * steps["sequence"], n_iter_sim * batch_size * steps["sequence"]),
     ],
 ):
     fig, axs = plt.subplots(9, 1, sharex=True, figsize=(8, 14), gridspec_kw={"hspace": 0.4, "left": 0.2})

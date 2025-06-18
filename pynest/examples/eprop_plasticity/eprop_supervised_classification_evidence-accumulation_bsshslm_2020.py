@@ -79,15 +79,13 @@ References
 # ~~~~~~~~~~~~~~~~
 # We begin by importing all libraries required for the simulation, analysis, and visualization.
 
-import argparse
-
+from IPython.display import Image
+from cycler import cycler
+from toolbox import Tools
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import nest
 import numpy as np
-from cycler import cycler
-from IPython.display import Image
-from toolbox import Tools
 
 # %% ###########################################################################################################
 # Schematic of network architecture
@@ -105,35 +103,40 @@ except Exception:
 # Setup
 # ~~~~~
 
-parser = argparse.ArgumentParser()
+config = dict(
+    average_gradient=True,
+    batch_size=1,
+    c_reg=300.0,
+    constrain_weights_dale_in=False,
+    constrain_weights_dale_out=False,
+    constrain_weights_dale_rec=False,
+    constrain_weights_sign_in=False,
+    constrain_weights_sign_out=False,
+    constrain_weights_sign_rec=False,
+    cpus_per_task=1,
+    do_early_stopping=False,
+    eta=5e-3,
+    exc_to_inh_ratio=1.0,
+    loss="cross_entropy",
+    n_iter_test=1,
+    n_iter_train=5,
+    n_iter_validate_every=10,
+    nodes=1,
+    ntasks_per_node=1,
+    record_dynamics=True,
+    recordings_dir="./",
+    reset_neurons=True,
+    seed=1,
+    surrogate_gradient="piecewise_linear",
+    surrogate_gradient_beta=1.0,
+    surrogate_gradient_gamma=0.3
+)
 
-parser.add_argument("--average_gradient", action=argparse.BooleanOptionalAction, default=True)
-parser.add_argument("--batch_size", type=int, default=1)
-parser.add_argument("--constrain_weights_sign_in", action=argparse.BooleanOptionalAction, default=False)
-parser.add_argument("--constrain_weights_sign_rec", action=argparse.BooleanOptionalAction, default=False)
-parser.add_argument("--constrain_weights_sign_out", action=argparse.BooleanOptionalAction, default=False)
-parser.add_argument("--constrain_weights_dale_in", action=argparse.BooleanOptionalAction, default=False)
-parser.add_argument("--constrain_weights_dale_rec", action=argparse.BooleanOptionalAction, default=False)
-parser.add_argument("--constrain_weights_dale_out", action=argparse.BooleanOptionalAction, default=False)
-parser.add_argument("--c_reg", type=float, default=300.0)
-parser.add_argument("--eta", type=float, default=5e-3)
-parser.add_argument("--exc_to_inh_ratio", type=float, default=1.0)
-parser.add_argument("--loss", type=str, default="cross_entropy")
-parser.add_argument("--n_iter_train", type=int, default=4)
-parser.add_argument("--n_iter_test", type=int, default=1)
-parser.add_argument("--nvp", type=int, default=1)
-parser.add_argument("--record_dynamics", action=argparse.BooleanOptionalAction, default=True)
-parser.add_argument("--recordings_dir", type=str, default="./")
-parser.add_argument("--reset_neurons", action=argparse.BooleanOptionalAction, default=True)
-parser.add_argument("--seed", type=int, default=1)
-parser.add_argument("--surrogate_gradient", type=str.lower, default="piecewise_linear")
-parser.add_argument("--surrogate_gradient_beta", type=float, default=1.0)
-parser.add_argument("--surrogate_gradient_gamma", type=float, default=0.3)
-parser.add_argument("--do_early_stopping", action=argparse.BooleanOptionalAction, default=False)
+tools = Tools(config, __file__)
+config = tools.config
 
-args = parser.parse_args()
-
-tools = Tools(parser)
+local_num_threads = config["cpus_per_task"]
+total_num_virtual_procs = config["nodes"] * config["ntasks_per_node"] * local_num_threads
 
 # %% ###########################################################################################################
 # Initialize random generator
@@ -141,7 +144,7 @@ tools = Tools(parser)
 # We seed the numpy random generator, which will generate random initial weights as well as random input and
 # output.
 
-rng_seed = args.seed  # numpy random seed
+rng_seed = config["seed"]  # numpy random seed
 np.random.seed(rng_seed)  # fix numpy random seed
 
 # %% ###########################################################################################################
@@ -154,11 +157,12 @@ np.random.seed(rng_seed)  # fix numpy random seed
 # classification error is tested in regular intervals and the training stopped as soon as the error selected as
 # stop criterion is reached. After training, the performance can be tested over a number of test iterations.
 
-batch_size = args.batch_size  # batch size, 64 in reference [2], 32 in the README to reference [2]
-n_iter_train = args.n_iter_train  # number of training iterations, 2000 in reference [2]
-n_iter_test = args.n_iter_test  # number of iterations for final test
-do_early_stopping = args.do_early_stopping  # if True, stop training as soon as stop criterion fulfilled
-n_iter_validate_every = 10  # number of training iterations before validation
+batch_size = config["batch_size"]  # batch size, 64 in reference [2], 32 in the README to reference [2]
+n_iter_train = config["n_iter_train"]  # number of training iterations, 2000 in reference [2]
+n_iter_test = config["n_iter_test"]  # number of iterations for final test
+do_early_stopping = config["do_early_stopping"]  # if True, stop training as soon as stop criterion fulfilled
+n_iter_validate_every = config["n_iter_validate_every"]  # number of training iterations before validation
+n_iter_validate = 1  # number of validation iterations to average over
 n_iter_early_stop = 8  # number of iterations to average over to evaluate early stopping condition
 stop_crit = 0.07  # error value corresponding to stop criterion for early stopping
 
@@ -207,13 +211,14 @@ duration.update({key: value * duration["step"] for key, value in steps.items()})
 
 params_setup = {
     "eprop_learning_window": duration["learning_window"],
-    "eprop_reset_neurons_on_update": args.reset_neurons,  # if True, reset dynamic variables at start of each update interval
+    "eprop_reset_neurons_on_update": config["reset_neurons"],  # if True, reset dynamic variables at start of each update interval
     "eprop_update_interval": duration["sequence"],  # ms, time interval for updating the synaptic weights
     "print_time": False,  # if True, print time progress bar during simulation, set False if run as code cell
     "resolution": duration["step"],
-    "total_num_virtual_procs": args.nvp,  # number of virtual processes, set in case of distributed computing
+    "total_num_virtual_procs": total_num_virtual_procs,  # number of virtual processes, set in case of distributed computing
+    "local_num_threads": local_num_threads,
     "overwrite_files": True,  # if True, overwrite existing files
-    "data_path": f"{args.recordings_dir}",  # path to save data to
+    "data_path": f"{config["recordings_dir"]}",  # path to save data to
 }
 
 ####################
@@ -240,22 +245,22 @@ params_nrn_out = {
     "C_m": 1.0,  # pF, membrane capacitance - takes effect only if neurons get current input (here not the case)
     "E_L": 0.0,  # mV, leak / resting membrane potential
     "I_e": 0.0,  # pA, external current input
-    "loss": args.loss,  # loss function
+    "loss": config["loss"],  # loss function
     "regular_spike_arrival": False,  # If True, input spikes arrive at end of time step, if False at beginning
     "tau_m": 20.0,  # ms, membrane time constant
     "V_m": 0.0,  # mV, initial value of the membrane voltage
 }
 
 params_nrn_reg = {
-    "beta": args.surrogate_gradient_beta,  # width scaling of the pseudo-derivative
+    "beta": config["surrogate_gradient_beta"],  # width scaling of the pseudo-derivative
     "C_m": 1.0,
-    "c_reg": args.c_reg,  # coefficient of firing rate regularization - 2*learning_window*(TF c_reg) for technical reasons
+    "c_reg": config["c_reg"],  # coefficient of firing rate regularization - 2*learning_window*(TF c_reg) for technical reasons
     "E_L": 0.0,
     "f_target": 10.0,  # spikes/s, target firing rate for firing rate regularization
-    "gamma": args.surrogate_gradient_gamma,  # height scaling of the pseudo-derivative
+    "gamma": config["surrogate_gradient_gamma"],  # height scaling of the pseudo-derivative
     "I_e": 0.0,
     "regular_spike_arrival": True,
-    "surrogate_gradient_function": args.surrogate_gradient,  # surrogate gradient / pseudo-derivative function
+    "surrogate_gradient_function": config["surrogate_gradient"],  # surrogate gradient / pseudo-derivative function
     "t_ref": 5.0,  # ms, duration of refractory period
     "tau_m": 20.0,
     "V_m": 0.0,
@@ -267,17 +272,17 @@ params_nrn_reg["gamma"] /= params_nrn_reg["V_th"]
 params_nrn_reg["beta"] /= np.abs(params_nrn_reg["V_th"])  # prefactor is inside abs in the original definition
 
 params_nrn_ad = {
-    "beta": args.surrogate_gradient_beta,
+    "beta": config["surrogate_gradient_beta"],
     "adapt_tau": 2000.0,  # ms, time constant of adaptive threshold
     "adaptation": 0.0,  # initial value of the spike threshold adaptation
     "C_m": 1.0,
-    "c_reg": args.c_reg,
+    "c_reg": config["c_reg"],
     "E_L": 0.0,
     "f_target": 10.0,
-    "gamma": args.surrogate_gradient_gamma,
+    "gamma": config["surrogate_gradient_gamma"],
     "I_e": 0.0,
     "regular_spike_arrival": True,
-    "surrogate_gradient_function": args.surrogate_gradient,
+    "surrogate_gradient_function": config["surrogate_gradient"],
     "t_ref": 5.0,
     "tau_m": 20.0,
     "V_m": 0.0,
@@ -373,7 +378,7 @@ for params in [params_mm_reg, params_mm_ad, params_mm_out, params_wr, params_sr_
 
 ####################
 
-if args.record_dynamics:
+if config["record_dynamics"]:
     params_mm_out["record_from"] += ["V_m", "readout_signal_unnorm", "error_signal"]
 
     mm_reg = nest.Create("multimeter", params_mm_reg)
@@ -423,13 +428,13 @@ params_common_syn_eprop = {
         "Wmin": -100.0,  # pA, minimal limit of the synaptic weights
         "Wmax": 100.0,  # pA, maximal limit of the synaptic weights
     },
-    "average_gradient": args.average_gradient,  # if True, average the gradient over the learning window
+    "average_gradient": config["average_gradient"],  # if True, average the gradient over the learning window
 }
 
 eta_test = 0.0  # learning rate for test phase
-eta_train = args.eta  # learning rate for training phase
+eta_train = config["eta"]  # learning rate for training phase
 
-if args.record_dynamics:
+if config["record_dynamics"]:
     params_common_syn_eprop["weight_recorder"] = wr
 
 params_syn_base = {
@@ -490,7 +495,7 @@ nest.Connect(nrns_out, nrns_rec, params_conn_all_to_all, params_syn_feedback)  #
 nest.Connect(gen_rate_target, nrns_out, params_conn_one_to_one, params_syn_rate_target)  # connection 6
 nest.Connect(nrns_out, nrns_out, params_conn_all_to_all, params_syn_out_out)  # connection 7
 
-if args.record_dynamics:
+if config["record_dynamics"]:
     nest.Connect(nrns_in, sr_in, params_conn_all_to_all, params_syn_static)
     nest.Connect(nrns_reg, sr_reg, params_conn_all_to_all, params_syn_static)
     nest.Connect(nrns_ad, sr_ad, params_conn_all_to_all, params_syn_static)
@@ -559,28 +564,32 @@ def generate_evidence_accumulation_input_output(batch_size, n_in, steps, input):
     return input_spike_bools, target_cues
 
 
-def get_params_task_input_output(n_iter_interval):
+def get_params_task_input_output(n_iter_interval, n_iter_curr):
     iteration_offset = n_iter_interval * batch_size * duration["sequence"]
     dtype_in_spks = np.float32  # data type of input spikes - for reproducing TF results set to np.float32
 
-    input_spike_bools, target_cues = generate_evidence_accumulation_input_output(batch_size, n_in, steps, input)
-
-    input_spike_bools_arr = np.array(input_spike_bools).reshape(batch_size * steps["sequence"], n_in)
-    timeline_task = (
-        np.arange(0.0, batch_size * duration["sequence"], duration["step"]) + iteration_offset + duration["offset_gen"]
-    )
+    input_spike_bools_arr_list = []
+    target_cues_list = []
+    for _ in range(n_iter_curr):
+        input_spike_bools, target_cues = generate_evidence_accumulation_input_output(batch_size, n_in, steps, input)
+        input_spike_bools_arr_list.append(input_spike_bools.reshape(batch_size * steps["sequence"], n_in))
+        target_cues_list.append(target_cues)
+    
+    input_spike_bools_arr = np.vstack(input_spike_bools_arr_list)
+    target_cues_arr = np.hstack(target_cues_list)
+    timeline_task = np.arange(0.0, n_iter_curr * batch_size * duration["sequence"], duration["step"]) + iteration_offset + duration["offset_gen"]
 
     params_gen_spk_in = [
         {"spike_times": timeline_task[input_spike_bools_arr[:, nrn_in_idx]].astype(dtype_in_spks)}
         for nrn_in_idx in range(n_in)
     ]
 
-    target_rate_changes = np.zeros((n_out, batch_size))
-    target_rate_changes[np.array(target_cues), np.arange(batch_size)] = 1
+    target_rate_changes = np.zeros((n_out, n_iter_curr * batch_size))
+    target_rate_changes[target_cues_arr, np.arange(n_iter_curr * batch_size)] = 1
 
     params_gen_rate_target = [
         {
-            "amplitude_times": np.arange(0.0, batch_size * duration["sequence"], duration["sequence"])
+            "amplitude_times": np.arange(0.0, n_iter_curr * batch_size * duration["sequence"], duration["sequence"])
             + iteration_offset
             + duration["total_offset"],
             "amplitude_values": target_rate_changes[nrn_out_idx],
@@ -621,7 +630,7 @@ def get_weights(pop_pre, pop_post):
     return conns
 
 
-if args.record_dynamics:
+if config["record_dynamics"]:
     weights_pre_train = {
         "in_rec": get_weights(nrns_in, nrns_rec),
         "rec_rec": get_weights(nrns_rec, nrns_rec),
@@ -642,42 +651,32 @@ if args.record_dynamics:
 
 class TrainingPipeline:
     def __init__(self):
-        self.results_dict = {
-            "error": [],
-            "loss": [],
-            "iteration": [],
-            "label": [],
-        }
         self.n_iter_sim = 0
         self.phase_label_previous = ""
         self.error = 0
         self.k_iter = 0
         self.early_stop = False
+        self.evaluate_curr = False
 
-    def evaluate(self, n_iteration=1):
-        events_mm_out = tools.get_events("multimeter_out")
+    def evaluate(self, prefix="", save=False):
+        events_mm_out = tools.get_events(f"{prefix}*multimeter_out*", save)
 
-        readout_signal = events_mm_out["readout_signal"]  # corresponds to softmax
-        target_signal = events_mm_out["target_signal"]
-        senders = events_mm_out["senders"]
-        times = events_mm_out["times"]
+        readout_signal = events_mm_out.readout_signal
+        target_signal = events_mm_out.target_signal
+        senders = events_mm_out.sender
 
-        cond1 = times > (self.n_iter_sim - n_iteration) * batch_size * duration["sequence"] + duration["total_offset"]
-        cond2 = times <= self.n_iter_sim * batch_size * duration["sequence"] + duration["total_offset"]
-        idc = cond1 & cond2
+        readout_signal = np.array([readout_signal[senders == i] for i in set(senders)])
+        target_signal = np.array([target_signal[senders == i] for i in set(senders)])
 
-        readout_signal = np.array([readout_signal[idc][senders[idc] == i] for i in set(senders)])
-        target_signal = np.array([target_signal[idc][senders[idc] == i] for i in set(senders)])
-
-        readout_signal = readout_signal.reshape((n_out, n_iteration, batch_size, steps["sequence"]))
-        target_signal = target_signal.reshape((n_out, n_iteration, batch_size, steps["sequence"]))
+        readout_signal = readout_signal.reshape((n_out, -1, batch_size, steps["sequence"]))
+        target_signal = target_signal.reshape((n_out, -1, batch_size, steps["sequence"]))
 
         readout_signal = readout_signal[:, :, :, -steps["learning_window"] :]
         target_signal = target_signal[:, :, :, -steps["learning_window"] :]
 
-        if args.loss == "cross_entropy":
+        if config["loss"] == "cross_entropy":
             loss = -np.mean(np.sum(target_signal * np.log(readout_signal), axis=0), axis=(1, 2))
-        elif args.loss == "mean_squared_error":
+        elif config["loss"] == "mean_squared_error":
             loss = 0.5 * np.mean(np.sum((readout_signal - target_signal) ** 2, axis=3), axis=(0, 2))
 
         y_prediction = np.argmax(np.mean(readout_signal, axis=3), axis=0)
@@ -685,89 +684,69 @@ class TrainingPipeline:
         accuracy = np.mean((y_target == y_prediction), axis=1)
         errors = 1.0 - accuracy
 
-        self.results_dict["iteration"].extend(range(self.n_iter_sim - n_iteration, self.n_iter_sim))
-        self.results_dict["error"].extend(errors)
-        self.results_dict["loss"].extend(loss)
-        self.results_dict["label"].extend([self.phase_label_previous for _ in range(n_iteration)])
+        self.error = np.mean(errors)
+        tools.loss.extend(loss.tolist())
+        tools.save_performance(save, loss, errors)
 
-        self.error = errors[0]
-
-    def run_phase(self, phase_label, eta):
+    def run_phase(self, phase_label, eta, n_iter, evaluate=False):
         tools.set_synapse_defaults(eta)
 
-        params_gen_spk_in, params_gen_rate_target = get_params_task_input_output(self.n_iter_sim)
+        params_gen_spk_in, params_gen_rate_target = get_params_task_input_output(self.n_iter_sim, n_iter)
         nest.SetStatus(gen_spk_in, params_gen_spk_in)
         nest.SetStatus(gen_rate_target, params_gen_rate_target)
 
-        self.simulate("total_offset")
-        self.simulate("extension_sim")
+        data_prefix = f"{nest.data_prefix[:-3]}_1_" if self.n_iter_sim > 0 else f"{self.n_iter_sim:05d}_offset_0_"
+        self.simulate(duration["total_offset"] + duration["extension_sim"], data_prefix)
 
-        duration["sim"] = batch_size * duration["sequence"] - duration["total_offset"] - duration["extension_sim"]
-        self.simulate("sim")
+        if self.n_iter_sim > 0 and self.evaluate_curr:
+            self.evaluate(nest.data_prefix[:-3])
+        self.evaluate_curr = evaluate
 
-        self.n_iter_sim += 1
+        duration["sim"] = n_iter * batch_size * duration["sequence"]
+        
+        if phase_label != "test":
+            duration["sim"] -= duration["total_offset"] + duration["extension_sim"]
+
+        self.simulate(duration["sim"], f"{(self.n_iter_sim+1):05d}_{phase_label}_0_")
+
+        tools.save_phase(phase_label, n_iter)
+
+        self.n_iter_sim += n_iter
         self.phase_label_previous = phase_label
 
-    def run_training(self):
-        self.run_phase("training", eta_train)
-
-    def run_validation(self):
-        if do_early_stopping and self.k_iter % n_iter_validate_every == 0:
-            self.run_phase("validation", eta_test)
-
-    def run_early_stopping(self):
-        if do_early_stopping and self.k_iter % n_iter_validate_every == 0:
-            if self.k_iter > 0 and self.error < stop_crit:
-                errors_early_stop = []
-                for _ in range(n_iter_early_stop):
-                    self.run_phase("early-stopping", eta_test)
-                    errors_early_stop.append(self.error)
-
-                self.early_stop = np.mean(errors_early_stop) < stop_crit
-
-    def run_test(self):
-        for _ in range(n_iter_test):
-            self.run_phase("test", eta_test)
-
-    def simulate(self, k):
-        nest.Run(duration[k])
+    def simulate(self, duration, data_prefix=''):
+        nest.data_prefix=data_prefix
+        nest.Simulate(duration)
 
     def run(self):
-        nest.Prepare()
-        while self.k_iter < n_iter_train and not self.early_stop:
-            self.run_validation()
-            self.run_early_stopping()
-            self.run_training()
-            self.k_iter += 1
+        if do_early_stopping:
+            for self.k_iter in np.arange(0, n_iter_train, n_iter_validate_every):
+                if do_early_stopping:
+                    self.run_phase("validation", eta_test, n_iter_validate, evaluate=True)
+                    if self.k_iter > 0 and self.error < stop_crit:
+                        self.run_phase("early-stopping", eta_test, n_iter_early_stop, evaluate=True)
+                        if self.error < stop_crit:
+                            break
+                self.run_phase("training", eta_train, n_iter_validate_every)
+        else:
+            self.run_phase("training", eta_train, n_iter_train)
 
-        self.run_test()
+        self.run_phase("test", eta_test, n_iter_test)
 
-        self.simulate("total_offset")
-        self.simulate("extension_sim")
+    def evaluate_final(self):
+        self.evaluate(save=True)
 
         duration["task"] = self.n_iter_sim * batch_size * duration["sequence"] + duration["total_offset"]
 
-        tools.process_recordings(duration, nrns_in, nrns_rec, nrns_out)
-        tools.process_timing(nest.GetKernelStatus())
-
-        self.evaluate(self.n_iter_sim)
-
         gen_spk_final_update.set({"spike_times": [duration["task"] + duration["extension_sim"] + 1]})
 
-        self.simulate("final_update")
-
-        nest.Cleanup()             
-
-    def get_results(self):
-        for k, v in self.results_dict.items():
-            self.results_dict[k] = np.array(v)
-        return self.results_dict
-
+        self.simulate(duration["final_update"])
 
 training_pipeline = TrainingPipeline()
 training_pipeline.run()
+tools.save_timing(nest.GetKernelStatus())
+training_pipeline.evaluate_final()
 
-results_dict = training_pipeline.get_results()
 n_iter_sim = training_pipeline.n_iter_sim
 
 # %% ###########################################################################################################
@@ -775,7 +754,7 @@ n_iter_sim = training_pipeline.n_iter_sim
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # After the training, we can read out the optimized final weights.
 
-if args.record_dynamics:
+if config["record_dynamics"]:
     weights_post_train = {
         "in_rec": get_weights(nrns_in, nrns_rec),
         "rec_rec": get_weights(nrns_rec, nrns_rec),
@@ -787,12 +766,12 @@ if args.record_dynamics:
 # ~~~~~~~~~~~~~~~~~~
 # We can also retrieve the recorded history of the dynamic variables and weights, as well as detected spikes.
 
-if args.record_dynamics:
+if config["record_dynamics"]:
     tools.save_weights_snapshots(weights_pre_train, weights_post_train)
 
 events_mm_out = tools.get_events("multimeter_out")
 
-if args.record_dynamics:
+if config["record_dynamics"]:
     events_mm_reg = tools.get_events("multimeter_reg")
     events_mm_ad = tools.get_events("multimeter_ad")
     events_sr_in = tools.get_events("spike_recorder_in")
@@ -800,8 +779,8 @@ if args.record_dynamics:
     events_sr_ad = tools.get_events("spike_recorder_ad")
     events_wr = tools.get_events("weight_recorder")
 
-tools.save_performance(results_dict)
 tools.verify()
+results_dict = tools.get_results()
 
 # %% ###########################################################################################################
 # Plot results
