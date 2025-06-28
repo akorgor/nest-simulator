@@ -419,8 +419,9 @@ eprop_iaf::compute_gradient( const long t_spike,
   auto eprop_hist_it = get_eprop_history( t_spike_previous - 1 );
 
   const long t_compute_until = std::min( t_spike_previous + V_.eprop_isi_trace_cutoff_steps_, t_spike );
+  const long cutoff_to_spike_interval = previous_event_was_activation ? t_spike - t_spike_previous : t_spike - t_compute_until;
 
-  if ( not( previous_event_was_activation and t_spike_previous + V_.eprop_isi_trace_cutoff_steps_ > t_spike ) )
+  if ( not previous_event_was_activation )
   {
 
     for ( long t = t_spike_previous; t < t_compute_until; ++t, ++eprop_hist_it )
@@ -448,18 +449,16 @@ eprop_iaf::compute_gradient( const long t_spike,
         sum_grad += L * e_bar + firing_rate_reg * e_bar_reg;
       }
     }
-
-    const long cutoff_to_spike_interval = t_spike - t_compute_until;
-
-    if ( cutoff_to_spike_interval > 0 )
-    {
-      z_bar *= std::pow( V_.P_v_m_, cutoff_to_spike_interval );
-      e_bar *= std::pow( P_.kappa_, cutoff_to_spike_interval );
-      e_bar_reg *= std::pow( P_.kappa_reg_, cutoff_to_spike_interval );
-    }
   }
 
-  if ( ( not pure_activation ) and ( not optimize_each_step ) )
+  if ( cutoff_to_spike_interval > 0 )
+  {
+    z_bar *= std::pow( V_.P_v_m_, cutoff_to_spike_interval );
+    e_bar *= std::pow( P_.kappa_, cutoff_to_spike_interval );
+    e_bar_reg *= std::pow( P_.kappa_reg_, cutoff_to_spike_interval );
+  }
+
+  if ( not ( pure_activation or not optimize_each_step ) )
   {
     weight = optimizer->optimized_weight( *ecp.optimizer_cp_, t_compute_until, sum_grad, weight );
   }
