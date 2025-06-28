@@ -61,6 +61,7 @@ parrot_neuron::update( Time const& origin, const long from, const long to )
 {
   for ( long lag = from; lag < to; ++lag )
   {
+    const long t = origin.get_steps() + lag;
     const unsigned long current_spikes_n = static_cast< unsigned long >( B_.n_spikes_.get_value( lag ) );
     if ( current_spikes_n > 0 )
     {
@@ -72,8 +73,16 @@ parrot_neuron::update( Time const& origin, const long from, const long to )
       // set the spike times, respecting the multiplicity
       for ( unsigned long i = 0; i < current_spikes_n; i++ )
       {
-        set_spiketime( Time::step( origin.get_steps() + lag + 1 ) );
+        set_spiketime( Time::step( t + 1 ) );
       }
+      set_last_event_time( t );
+    }
+    else if ( get_last_event_time() > 0 and t - get_last_event_time() >= activation_interval_ )
+    {
+      SpikeEvent se;
+      se.set_pure_activation();
+      kernel().event_delivery_manager.send( *this, se, lag );
+      set_last_event_time( t );
     }
   }
 }

@@ -242,7 +242,7 @@ public:
   /**
    * Sets the time the neuron spiked.
    */
-  void set_last_event_time( const long last_spike_time );
+  void set_last_event_time( const long last_event_time );
 
   /**
    * Gets the last time the neuron spiked.
@@ -256,7 +256,7 @@ public:
   double f_av_;
 
   //! Last time the neuron spiked.
-  long last_spike_time_;
+  long last_event_time_;
 
 protected:
   long model_dependent_history_shift_() const override;
@@ -298,16 +298,16 @@ EpropArchivingNodeRecurrent< hist_shift_required >::reset_spike_count()
 
 template < bool hist_shift_required >
 inline void
-EpropArchivingNodeRecurrent< hist_shift_required >::set_last_event_time( const long last_spike_time )
+EpropArchivingNodeRecurrent< hist_shift_required >::set_last_event_time( const long last_event_time )
 {
-  last_spike_time_ = last_spike_time;
+  last_event_time_ = last_event_time;
 }
 
 template < bool hist_shift_required >
 inline long
 EpropArchivingNodeRecurrent< hist_shift_required >::get_last_event_time()
 {
-  return last_spike_time_;
+  return last_event_time_;
 }
 
 template < bool hist_shift_required >

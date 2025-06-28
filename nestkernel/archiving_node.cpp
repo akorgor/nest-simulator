@@ -34,7 +34,8 @@ namespace nest
 // member functions for ArchivingNode
 
 nest::ArchivingNode::ArchivingNode()
-  : n_incoming_( 0 )
+  : activation_interval_( 3000 )
+  , n_incoming_( 0 )
   , Kminus_( 0.0 )
   , Kminus_triplet_( 0.0 )
   , tau_minus_( 20.0 )
@@ -44,11 +45,13 @@ nest::ArchivingNode::ArchivingNode()
   , max_delay_( 0 )
   , trace_( 0.0 )
   , last_spike_( -1.0 )
+  , last_event_time_( 0 )
 {
 }
 
 nest::ArchivingNode::ArchivingNode( const ArchivingNode& n )
   : StructuralPlasticityNode( n )
+  , activation_interval_( n.activation_interval_ )
   , n_incoming_( n.n_incoming_ )
   , Kminus_( n.Kminus_ )
   , Kminus_triplet_( n.Kminus_triplet_ )
@@ -59,6 +62,7 @@ nest::ArchivingNode::ArchivingNode( const ArchivingNode& n )
   , max_delay_( n.max_delay_ )
   , trace_( n.trace_ )
   , last_spike_( n.last_spike_ )
+  , last_event_time_( n.last_event_time_ )
 {
 }
 
@@ -175,6 +179,18 @@ nest::ArchivingNode::get_history( double t1,
     ++runner;
   }
   *start = runner.base();
+}
+
+void
+ArchivingNode::set_last_event_time( const long last_event_time )
+{
+  last_event_time_ = last_event_time;
+}
+
+long
+ArchivingNode::get_last_event_time()
+{
+  return last_event_time_;
 }
 
 void
