@@ -819,6 +819,7 @@ class TrainingPipeline:
 training_pipeline = TrainingPipeline()
 training_pipeline.run()
 tools.save_kernel_status(nest.GetKernelStatus())
+print("Finished successfully.")
 exit()
 training_pipeline.evaluate_final()
 
