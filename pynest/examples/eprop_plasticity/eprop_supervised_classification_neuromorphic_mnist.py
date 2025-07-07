@@ -77,6 +77,7 @@ References
 
 from IPython.display import Image
 from cycler import cycler
+from mpi4py import MPI
 from pathlib import Path
 from toolbox import Tools
 import matplotlib as mpl
@@ -113,7 +114,6 @@ config = dict(
     constrain_weights_sign_in=False,
     constrain_weights_sign_out=False,
     constrain_weights_sign_rec=False,
-    cpus_per_task=1,
     cutoff=100,
     dataset_dir="./",
     do_early_stopping=False,
@@ -126,8 +126,6 @@ config = dict(
     n_iter_test=1,
     n_iter_train=5,
     n_iter_validate_every=10,
-    nodes=1,
-    ntasks_per_node=1,
     record_dynamics=True,
     recordings_dir="./",
     seed=1,
@@ -135,13 +133,19 @@ config = dict(
     surrogate_gradient="piecewise_linear",
     surrogate_gradient_beta=1.7,
     surrogate_gradient_gamma=0.5,
+    stop_crit=0.07,
+    submit=dict(
+        nodes=1,
+        cpus_per_task=1,
+        ntasks_per_node=1,
+    )
 )
 
 tools = Tools(config, __file__)
 config = tools.config
 
-local_num_threads = config["cpus_per_task"]
-total_num_virtual_procs = config["nodes"] * config["ntasks_per_node"] * local_num_threads
+local_num_threads = config["submit"]["cpus_per_task"]
+total_num_virtual_procs = config["submit"]["nodes"] * config["submit"]["ntasks_per_node"] * local_num_threads
 
 # %% ###########################################################################################################
 # Initialize random generator
@@ -171,7 +175,7 @@ do_early_stopping = config["do_early_stopping"]  # if True, stop training as soo
 n_iter_validate_every = config["n_iter_validate_every"]  # number of training iterations before validation
 n_iter_validate = 1  # number of validation iterations to average over
 n_iter_early_stop = 8  # number of iterations to average over to evaluate early stopping condition
-stop_crit = 0.07  # error value corresponding to stop criterion for early stopping
+stop_crit = config["stop_crit"]  # error value corresponding to stop criterion for early stopping
 
 steps = {
     "sequence": 300,  # time steps of one full sequence
@@ -195,6 +199,8 @@ duration = {"step": 1.0}  # ms, temporal resolution of the simulation
 
 duration.update({key: value * duration["step"] for key, value in steps.items()})  # ms, durations
 
+learning_window = duration["sequence"] != duration["learning_window"]
+
 # %% ###########################################################################################################
 # Set up simulation
 # .................
@@ -206,7 +212,7 @@ params_setup = {
     "resolution": duration["step"],
     "total_num_virtual_procs": total_num_virtual_procs,  # number of virtual processes, set in case of distributed computing
     "local_num_threads": local_num_threads,
-    "overwrite_files": True,  # if True, overwrite existing files
+    "overwrite_files": False,  # if True, overwrite existing files
     "data_path": f"{config["recordings_dir"]}",  # path to save data to
 }
 
@@ -214,6 +220,10 @@ params_setup = {
 
 nest.ResetKernel()
 nest.set(**params_setup)
+
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+
 nest.set_verbosity("M_FATAL")
 
 # %% ###########################################################################################################
@@ -292,7 +302,8 @@ nrns_in = nest.Create("parrot_neuron", n_in)
 nrns_rec = nest.Create(config["model_nrn_rec"], n_rec, params_nrn_rec)
 nrns_out = nest.Create("eprop_readout", n_out, params_nrn_out)
 gen_rate_target = nest.Create("step_rate_generator", n_out)
-gen_learning_window = nest.Create("step_rate_generator")
+if learning_window:
+    gen_learning_window = nest.Create("step_rate_generator")
 
 # %% ###########################################################################################################
 # Create recorders
@@ -492,7 +503,8 @@ else:
 
 nest.Connect(nrns_out, nrns_rec, params_conn_all_to_all, params_syn_feedback)  # connection 5
 nest.Connect(gen_rate_target, nrns_out, params_conn_one_to_one, params_syn_rate_target)  # connection 6
-nest.Connect(gen_learning_window, nrns_out, params_conn_all_to_all, params_syn_learning_window)  # connection 7
+if learning_window:
+    nest.Connect(gen_learning_window, nrns_out, params_conn_all_to_all, params_syn_learning_window)  # connection 7
 
 if config["record_dynamics"]:
     nest.Connect(nrns_in, sr_in, params_conn_all_to_all, params_syn_static)
@@ -625,7 +637,6 @@ def get_params_task_input_output(n_iter_interval, n_iter_curr, loader):
 
     spike_times = [[] for _ in range(n_in)]
 
-
     params_gen_rate_target = [
         {
             "amplitude_times": np.arange(0.0, n_iter_curr * batch_size * duration["sequence"], duration["sequence"])
@@ -652,18 +663,21 @@ def get_params_task_input_output(n_iter_interval, n_iter_curr, loader):
 
     params_gen_spk_in = [{"spike_times": spk_times} for spk_times in spike_times]
 
-    params_gen_learning_window = {
-        "amplitude_times": np.hstack(
-            [
-                np.array([0.0, duration["sequence"] - duration["learning_window"]])
-                + iteration_offset
-                + batch_element * duration["sequence"]
-                + duration["total_offset"]
-                for batch_element in range(n_iter_curr * batch_size)
-            ]
-        ),
-        "amplitude_values": np.tile([0.0, 1.0], n_iter_curr * batch_size),
-    }
+    if learning_window:
+        params_gen_learning_window = {
+            "amplitude_times": np.hstack(
+                [
+                    np.array([0.0, duration["sequence"] - duration["learning_window"]])
+                    + iteration_offset
+                    + batch_element * duration["sequence"]
+                    + duration["total_offset"]
+                    for batch_element in range(n_iter_curr * batch_size)
+                ]
+            ),
+            "amplitude_values": np.tile([0.0, 1.0], n_iter_curr * batch_size),
+        }
+    else:
+        params_gen_learning_window = None
 
     return params_gen_spk_in, params_gen_rate_target, params_gen_learning_window
 
@@ -729,13 +743,13 @@ class TrainingPipeline:
     def __init__(self):
         self.n_iter_sim = 0
         self.phase_label_previous = ""
-        self.error = 0
+        self.prefix_previous = ""
+        self.error = 1.0
         self.k_iter = 0
         self.early_stop = False
         self.evaluate_curr = False
 
-    def evaluate(self, prefix="", save=False):
-        events_mm_out = tools.get_events(f"{prefix}*multimeter_out*", save)
+    def evaluate(self, events_mm_out):
 
         readout_signal = events_mm_out.readout_signal
         target_signal = events_mm_out.target_signal
@@ -756,34 +770,29 @@ class TrainingPipeline:
         y_target = np.argmax(np.mean(target_signal, axis=3), axis=0)
         accuracy = np.mean((y_target == y_prediction), axis=1)
         errors = 1.0 - accuracy
+        error = np.mean(errors)
 
-        self.error = np.mean(errors)
-        tools.loss.extend(loss.tolist())
-        tools.save_performance(save, loss, errors)
+        tools.save_performance(self.n_iter_sim, loss, errors, self.phase_label_previous)
+        return error
 
-    def run_phase(self, phase_label, eta, n_iter, loader, evaluate=False):
+    def run_phase(self, phase_label, eta, n_iter, loader, evaluate):
+        if n_iter == 0:
+            return
         tools.set_synapse_defaults(eta)
 
         params_gen_spk_in, params_gen_rate_target, params_gen_learning_window = get_params_task_input_output(self.n_iter_sim, n_iter, loader)
         nest.SetStatus(gen_spk_in, params_gen_spk_in)
         nest.SetStatus(gen_rate_target, params_gen_rate_target)
-        nest.SetStatus(gen_learning_window, params_gen_learning_window)
+        if learning_window:
+            nest.SetStatus(gen_learning_window, params_gen_learning_window)
 
-        data_prefix = f"{nest.data_prefix[:-3]}_1_" if self.n_iter_sim > 0 else f"{self.n_iter_sim:05d}_offset_0_"
-        self.simulate(duration["total_offset"] + duration["extension_sim"], data_prefix)
-
-        if self.n_iter_sim > 0 and self.evaluate_curr:
-            self.evaluate(nest.data_prefix[:-3])
+        self.process()
         self.evaluate_curr = evaluate
 
-        duration["sim"] = n_iter * batch_size * duration["sequence"]
+        duration["sim"] = n_iter * batch_size * duration["sequence"] - duration["total_offset"] - duration["extension_sim"]
 
-        if phase_label != "test":
-            duration["sim"] -= duration["total_offset"] + duration["extension_sim"]
-
-        self.simulate(duration["sim"], f"{(self.n_iter_sim+1):05d}_{phase_label}_0_")
-
-        tools.save_phase(phase_label, n_iter)
+        self.prefix_previous = f"{(self.n_iter_sim+1):05d}_{phase_label}"
+        self.simulate(duration["sim"], f"{self.prefix_previous}_0_")
 
         self.n_iter_sim += n_iter
         self.phase_label_previous = phase_label
@@ -796,20 +805,38 @@ class TrainingPipeline:
         if do_early_stopping:
             for self.k_iter in np.arange(0, n_iter_train, n_iter_validate_every):
                 if do_early_stopping:
-                    self.run_phase("validation", eta_test, n_iter_validate, data_loader_test, evaluate=True)
+                    self.run_phase("validation", eta_test, n_iter_validate, data_loader_test, True)
+                    self.run_phase("validation", eta_test, n_iter_validate, data_loader_test, True)
                     if self.k_iter > 0 and self.error < stop_crit:
-                        self.run_phase("early-stopping", eta_test, n_iter_early_stop, data_loader_test, evaluate=True)
+                        self.run_phase("early-stopping", eta_test, n_iter_early_stop, data_loader_test, True)
+                        self.run_phase("early-stopping", eta_test, 1, data_loader_test, True)
                         if self.error < stop_crit:
                             break
-                self.run_phase("training", eta_train, n_iter_validate_every, data_loader_train)
+                self.run_phase("training", eta_train, n_iter_validate_every, data_loader_train, True)
         else:
-            self.run_phase("training", eta_train, n_iter_train, data_loader_train)
+            self.run_phase("training", eta_train, n_iter_train, data_loader_train, True)
 
-        self.run_phase("test", eta_test, n_iter_test, data_loader_test)
+        self.run_phase("test", eta_test, n_iter_test, data_loader_test, True)
+
+        self.process()
+
+    def process(self):
+        data_prefix = f"{self.prefix_previous}_1_" if self.n_iter_sim > 0 else f"{self.n_iter_sim:05d}_offset_0_"
+        self.simulate(duration["total_offset"] + duration["extension_sim"], data_prefix)
+
+        error = None
+
+        if rank == 0:
+            if self.evaluate_curr:
+                events = tools.get_events(self.prefix_previous, save=True)
+                error = self.error if events.empty else self.evaluate(events)
+            else:
+                tools.clear_events(self.prefix_previous)
+
+        if self.evaluate_curr:
+            self.error = comm.bcast(error, root=0)
 
     def evaluate_final(self):
-        self.evaluate(save=True)
-
         duration["task"] = self.n_iter_sim * batch_size * duration["sequence"] + duration["total_offset"]
 
         gen_spk_final_update.set({"spike_times": [duration["task"] + duration["extension_sim"] + 1]})
@@ -818,7 +845,8 @@ class TrainingPipeline:
 
 training_pipeline = TrainingPipeline()
 training_pipeline.run()
-tools.save_timing(nest.GetKernelStatus())
+tools.save_kernel_status(nest.GetKernelStatus())
+exit()
 training_pipeline.evaluate_final()
 
 n_iter_sim = training_pipeline.n_iter_sim

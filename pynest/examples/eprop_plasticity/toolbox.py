@@ -1,8 +1,10 @@
+from pathlib import Path
+import json
+import math
 import nest
 import numpy as np
 import pandas as pd
-import json
-from pathlib import Path
+from collections.abc import Mapping
 
 
 class Tools:
@@ -12,7 +14,7 @@ class Tools:
         self.recordings_dir = Path(self.config["recordings_dir"])
         self.save_config()
         self.file_name = Path(file_path).name
-        self.remove_recordings()
+        # self.remove_recordings()
         self.timing_dict = dict(
             biological_time=0.0,
             time_communicate_prepare=0.0,
@@ -20,17 +22,24 @@ class Tools:
             time_construction_create=0.0,
             time_simulate=0.0,
         )
-        self.loss = []
+
+    def deep_update(self, orig, new):
+        for key, val in new.items():
+            if key in orig and isinstance(orig[key], dict) and isinstance(val, Mapping):
+                self.deep_update(orig[key], val)
+            else:
+                orig[key] = val
+        return orig
 
     def load_config(self):
-        with open("config.json") as f:
-            config_updated = json.load(f)
-            for k, v in config_updated.items():
-                self.config[k] = v
+        config_path = Path(__file__).parent / "config.json"
+        if config_path.is_file():
+            with open(config_path) as f:
+                self.deep_update(self.config, json.load(f))
 
     def save_config(self):
-        with open(self.recordings_dir / "config.json", "w") as file:
-            json.dump(self.config, file)
+        with open(self.recordings_dir / "config_full.json", "w") as file:
+            json.dump(self.config, file, indent=4)
 
     def remove_recordings(self):
         for file_path in self.recordings_dir.iterdir():
@@ -197,49 +206,49 @@ class Tools:
                     df_subset.to_csv(self.recordings_dir / f"{recorder_label}_subset.csv", index=False)
 
     def get_events(self, prefix, save=False):
-        data_list = []
-        for f in sorted(self.recordings_dir.glob(f"*{prefix}*.dat")):
-            data = pd.read_csv(f, delimiter="\t", comment="#", engine="c")
-            if not data.empty:
-                data_list.append(data)
-        events_mm_out = pd.concat(data_list, ignore_index=True)
-        if save:
-            events_mm_out.to_csv(self.recordings_dir / "multimeter_out.csv", index=False)
-        return events_mm_out
+        dfs = []
+        for path in sorted(self.recordings_dir.glob(f"{prefix}*multimeter_out*.dat")):
+            df = pd.read_csv(path, sep="\t", comment="#", engine="c")
+            if not df.empty:
+                dfs.append(df)
+            path.unlink()
+
+        if dfs:
+            events = pd.concat(dfs, ignore_index=True)
+            if save:
+                events.to_csv(self.recordings_dir / f"{prefix}_multimeter_out.csv", index=False)
+            return events
+        else:
+            return pd.DataFrame()
+
+    def clear_events(self, prefix):
+        for path in sorted(self.recordings_dir.glob(f"{prefix}*multimeter_out*.dat")):
+            path.unlink()
 
     def get_results(self):
         return pd.read_csv(self.recordings_dir / "learning_performance.csv", engine="c")
 
-    def save_timing(self, kernel_status):
-        for k in self.timing_dict.keys():
-            v = kernel_status[k]
-            if k == "time_simulate":
-                self.timing_dict[k] += v
-            else:
-                self.timing_dict[k] = v
+    def make_serializable(self, obj):
+        if isinstance(obj, float) and (math.isinf(obj) or math.isnan(obj)):
+            return str(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, tuple):
+            return list(obj)
+        if isinstance(obj, dict):
+            return {k: self.make_serializable(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [self.make_serializable(i) for i in obj]
+        return obj
 
-        timing_dict_final = {}
-        for k, v in self.timing_dict.items():
-            if k == "biological_time":
-                v /= 1000.0  # convert from ms to s
-            timing_dict_final[f"{k}_s"] = [v]
+    def save_kernel_status(self, kernel_status):
+        with open(self.recordings_dir / "kernel_status.json", "w") as f:
+            json.dump(self.make_serializable(kernel_status), f, indent=4)
 
-        pd.DataFrame.from_dict(timing_dict_final).to_csv(self.recordings_dir / "timing.csv", index=False)
-    def save_phase(self, phase_label, n_iter):
-        with open(self.recordings_dir / "phases.dat", "a") as f:
-            f.write(f"{phase_label},{n_iter}\n")
-
-    def save_performance(self, save, loss, errors):
-        if save:
-            df = pd.read_csv(self.recordings_dir / "phases.dat", names=["phase", "repetition"], engine="c")
-            labels = np.repeat(df.phase.values, df.repetition.values).tolist()
-            pd.DataFrame(dict(
-                iteration=np.arange(len(loss)),
-                loss=loss,
-                error=errors,
-                label=labels,
-                )
-            ).to_csv(self.recordings_dir / "learning_performance.csv", index=False)
+    def save_performance(self, iteration, loss, errors, phase_label):
+            with open(self.recordings_dir / "learning_performance.csv", "a") as f:
+                for l, e in zip(loss, errors):
+                    f.write(f"{iteration},{phase_label},{l},{e}\n")
 
     def verify(self):
         # print(self.file_name)
