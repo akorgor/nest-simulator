@@ -199,8 +199,6 @@ duration = {"step": 1.0}  # ms, temporal resolution of the simulation
 
 duration.update({key: value * duration["step"] for key, value in steps.items()})  # ms, durations
 
-learning_window = duration["sequence"] != duration["learning_window"]
-
 # %% ###########################################################################################################
 # Set up simulation
 # .................
@@ -302,8 +300,7 @@ nrns_in = nest.Create("parrot_neuron", n_in)
 nrns_rec = nest.Create(config["model_nrn_rec"], n_rec, params_nrn_rec)
 nrns_out = nest.Create("eprop_readout", n_out, params_nrn_out)
 gen_rate_target = nest.Create("step_rate_generator", n_out)
-if learning_window:
-    gen_learning_window = nest.Create("step_rate_generator")
+gen_learning_window = nest.Create("step_rate_generator")
 
 # %% ###########################################################################################################
 # Create recorders
@@ -503,8 +500,7 @@ else:
 
 nest.Connect(nrns_out, nrns_rec, params_conn_all_to_all, params_syn_feedback)  # connection 5
 nest.Connect(gen_rate_target, nrns_out, params_conn_one_to_one, params_syn_rate_target)  # connection 6
-if learning_window:
-    nest.Connect(gen_learning_window, nrns_out, params_conn_all_to_all, params_syn_learning_window)  # connection 7
+nest.Connect(gen_learning_window, nrns_out, params_conn_all_to_all, params_syn_learning_window)  # connection 7
 
 if config["record_dynamics"]:
     nest.Connect(nrns_in, sr_in, params_conn_all_to_all, params_syn_static)
@@ -663,7 +659,7 @@ def get_params_task_input_output(n_iter_interval, n_iter_curr, loader):
 
     params_gen_spk_in = [{"spike_times": spk_times} for spk_times in spike_times]
 
-    if learning_window:
+    if duration["sequence"] != duration["learning_window"]:
         params_gen_learning_window = {
             "amplitude_times": np.hstack(
                 [
@@ -677,7 +673,10 @@ def get_params_task_input_output(n_iter_interval, n_iter_curr, loader):
             "amplitude_values": np.tile([0.0, 1.0], n_iter_curr * batch_size),
         }
     else:
-        params_gen_learning_window = None
+        params_gen_learning_window = {
+            "amplitude_times": [duration["total_offset"]],
+            "amplitude_values": [1.0],
+        }
 
     return params_gen_spk_in, params_gen_rate_target, params_gen_learning_window
 
@@ -783,8 +782,7 @@ class TrainingPipeline:
         params_gen_spk_in, params_gen_rate_target, params_gen_learning_window = get_params_task_input_output(self.n_iter_sim, n_iter, loader)
         nest.SetStatus(gen_spk_in, params_gen_spk_in)
         nest.SetStatus(gen_rate_target, params_gen_rate_target)
-        if learning_window:
-            nest.SetStatus(gen_learning_window, params_gen_learning_window)
+        nest.SetStatus(gen_learning_window, params_gen_learning_window)
 
         self.process()
         self.evaluate_curr = evaluate
