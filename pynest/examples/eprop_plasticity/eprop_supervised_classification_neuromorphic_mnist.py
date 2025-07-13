@@ -134,18 +134,16 @@ config = dict(
     surrogate_gradient_beta=1.7,
     surrogate_gradient_gamma=0.5,
     stop_crit=0.07,
-    submit=dict(
-        nodes=1,
-        cpus_per_task=1,
-        ntasks_per_node=1,
-    )
+    nodes=1,
+    cpus_per_task=1,
+    ntasks_per_node=1,
 )
 
 tools = Tools(config, __file__)
 config = tools.config
 
-local_num_threads = config["submit"]["cpus_per_task"]
-total_num_virtual_procs = config["submit"]["nodes"] * config["submit"]["ntasks_per_node"] * local_num_threads
+local_num_threads = config["cpus_per_task"]
+total_num_virtual_procs = config["nodes"] * config["ntasks_per_node"] * local_num_threads
 
 # %% ###########################################################################################################
 # Initialize random generator
