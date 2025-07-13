@@ -119,6 +119,7 @@ config = dict(
     exc_to_inh_ratio=1.0,
     learning_window=10,
     loss="cross_entropy",
+    model_nrn_rec="eprop_iaf_bsshslm_2020",
     n_iter_test=1,
     n_iter_train=5,
     n_iter_validate_every=10,
@@ -286,7 +287,7 @@ nrns_in = nest.Create("parrot_neuron", n_in)
 # The suffix _bsshslm_2020 follows the NEST convention to indicate in the model name the paper
 # that introduced it by the first letter of the authors' last names and the publication year.
 
-nrns_rec = nest.Create("eprop_iaf_bsshslm_2020", n_rec, params_nrn_rec)
+nrns_rec = nest.Create(config["model_nrn_rec"], n_rec, params_nrn_rec)
 nrns_out = nest.Create("eprop_readout_bsshslm_2020", n_out, params_nrn_out)
 gen_rate_target = nest.Create("step_rate_generator", n_out)
 
