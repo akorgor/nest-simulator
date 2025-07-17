@@ -766,14 +766,13 @@ class TrainingPipeline:
     def run(self):
         if do_early_stopping:
             for self.k_iter in np.arange(0, n_iter_train, n_iter_validate_every):
-                if do_early_stopping:
-                    self.run_phase("validation", eta_test, n_iter_validate, data_loader_test, True)
-                    self.run_phase("validation", eta_test, n_iter_validate, data_loader_test, True)
-                    if self.k_iter > 0 and self.error < stop_crit:
-                        self.run_phase("early-stopping", eta_test, n_iter_early_stop, data_loader_test, True)
-                        self.run_phase("early-stopping", eta_test, 1, data_loader_test, True)
-                        if self.error < stop_crit:
-                            break
+                self.run_phase("validation", eta_test, n_iter_validate, data_loader_test, True)
+                self.run_phase("validation", eta_test, n_iter_validate, data_loader_test, True)
+                if self.k_iter > 0 and self.error < stop_crit:
+                    self.run_phase("early-stopping", eta_test, n_iter_early_stop, data_loader_test, True)
+                    self.run_phase("early-stopping", eta_test, 1, data_loader_test, True)
+                    if self.error < stop_crit:
+                        break
                 self.run_phase("training", eta_train, n_iter_validate_every, data_loader_train, True)
         else:
             self.run_phase("training", eta_train, n_iter_train, data_loader_train, True)
