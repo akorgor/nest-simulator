@@ -525,6 +525,7 @@ eprop_synapse< targetidentifierT >::send( Event& e, size_t thread, const EpropSy
   target->erase_used_eprop_history( t_spike, t_spike_previous_ );
 
   t_spike_previous_ = t_spike;
+  previous_event_was_activation_ = pure_activation;
 
   if ( not pure_activation )
   {
@@ -534,11 +535,6 @@ eprop_synapse< targetidentifierT >::send( Event& e, size_t thread, const EpropSy
     e.set_rport( get_rport() );
     e();
 
-    previous_event_was_activation_ = false;
-  }
-  else
-  {
-    previous_event_was_activation_ = true;
   }
   return true;
 }
