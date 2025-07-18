@@ -453,9 +453,9 @@ eprop_iaf::compute_gradient( const long t_spike,
 
   if ( cutoff_to_spike_interval > 0 )
   {
-    z_bar *= std::pow( V_.P_v_m_, cutoff_to_spike_interval );
-    e_bar *= std::pow( P_.kappa_, cutoff_to_spike_interval );
-    e_bar_reg *= std::pow( P_.kappa_reg_, cutoff_to_spike_interval );
+    z_bar *= std::exp( std::log( V_.P_v_m_ ) * cutoff_to_spike_interval );
+    e_bar *= std::exp( std::log( P_.kappa_ ) * cutoff_to_spike_interval );
+    e_bar_reg *= std::exp( std::log( P_.kappa_reg_ ) * cutoff_to_spike_interval );
   }
 
   if ( not ( pure_activation or not optimize_each_step ) )
