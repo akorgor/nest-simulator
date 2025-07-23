@@ -632,9 +632,7 @@ def get_params_task_input_output(n_iter_interval, n_iter_curr, loader):
             for n, relative_times in enumerate(input_batch[batch_element]):
                 if len(relative_times) > 0:
                     relative_times = np.array(relative_times)
-                else:
-                    relative_times = np.array([100.0])
-                spike_times[n].extend(
+                    spike_times[n].extend(
                         iteration_offset + (i*batch_size + batch_element) * duration["sequence"] + relative_times + duration["offset_gen"]
                     )
 
