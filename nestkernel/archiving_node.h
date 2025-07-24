@@ -101,16 +101,8 @@ protected:
 
   //! Interval between two activations.
   long activation_interval_;
-
-  /**
-   * Sets the time the neuron spiked.
-   */
-  void set_last_event_time( const long last_event_time );
-
-  /**
-   * Gets the last time the neuron spiked.
-   */
-  long get_last_event_time();
+  bool previous_event_was_activation_;
+  long last_event_time_;
 
   /**
    * Record spike history
@@ -153,7 +145,6 @@ private:
   double trace_;
 
   double last_spike_;
-  long last_event_time_;
 
   // spiking history needed by stdp synapses
   std::deque< histentry > history_;
