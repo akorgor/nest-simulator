@@ -414,7 +414,6 @@ eprop_iaf::compute_gradient( const long t_spike,
   }
 
   const EpropSynapseCommonProperties& ecp = static_cast< const EpropSynapseCommonProperties& >( cp );
-  const auto optimize_each_step = ( *ecp.optimizer_cp_ ).optimize_each_step_;
 
   auto eprop_hist_it = get_eprop_history( t_spike_previous - 1 );
 
@@ -439,15 +438,7 @@ eprop_iaf::compute_gradient( const long t_spike,
       e_bar = P_.kappa_ * e_bar + e;
       e_bar_reg = P_.kappa_reg_ * e_bar_reg + ( 1.0 - P_.kappa_reg_ ) * e;
 
-      if ( optimize_each_step )
-      {
-        sum_grad = L * e_bar + firing_rate_reg * e_bar_reg;
-        weight = optimizer->optimized_weight( *ecp.optimizer_cp_, t, sum_grad, weight );
-      }
-      else
-      {
-        sum_grad += L * e_bar + firing_rate_reg * e_bar_reg;
-      }
+      sum_grad += L * e_bar + firing_rate_reg * e_bar_reg;
     }
   }
 
@@ -458,7 +449,7 @@ eprop_iaf::compute_gradient( const long t_spike,
     e_bar_reg *= std::exp( std::log( P_.kappa_reg_ ) * cutoff_to_spike_interval );
   }
 
-  if ( not ( pure_activation or not optimize_each_step ) )
+  if ( not pure_activation )
   {
     weight = optimizer->optimized_weight( *ecp.optimizer_cp_, t_compute_until, sum_grad, weight );
   }
