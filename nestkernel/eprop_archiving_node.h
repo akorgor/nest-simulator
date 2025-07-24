@@ -137,6 +137,9 @@ protected:
   //! History of dynamic variables needed for e-prop plasticity.
   std::vector< HistEntryT > eprop_history_;
 
+  // Number of entries at the front of the eprop_history that are logically erased.
+  size_t eprop_head_ = 0;
+
   // The following shifts are, for now, hardcoded to 1 time step since the current
   // implementation only works if all the delays are equal to the simulation resolution.
 
