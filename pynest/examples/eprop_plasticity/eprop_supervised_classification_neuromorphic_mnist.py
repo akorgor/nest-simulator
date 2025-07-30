@@ -109,7 +109,6 @@ config = dict(
     V_reset=-0.3,
     V_th=0.85,
     batch_size=100,
-    blocklist_dir="./",
     c_reg=400.0,
     constrain_weights_dale_in=False,
     constrain_weights_dale_out=False,
@@ -240,12 +239,7 @@ nest.set_verbosity("M_FATAL")
 # We proceed by creating a certain number of input, recurrent, and readout neurons and setting their parameters.
 # Additionally, we already create an input spike generator and an output target rate generator, which we will
 # configure later. Each input sample is mapped out to a 34x34 pixel grid and a polarity dimension. We allocate
-# Poisson generators to each input image pixel to simulate spike events. However, due to the observation
-# that some pixels either never record events or do so infrequently, we maintain a blocklist of these inactive
-# pixels. By omitting Poisson generators for pixels on this blocklist, we effectively reduce the total number of
-# input neurons and Poisson generators required, optimizing the network's resource usage.
-
-pixels_blocklist = np.loadtxt(Path(config["blocklist_dir"]) / "NMNIST_pixels_blocklist.txt")
+# Poisson generators to each input image pixel to simulate spike events.
 
 pixels_dict = dict(
     n_x=34,  # number of pixels in horizontal direction
@@ -254,10 +248,8 @@ pixels_dict = dict(
 )
 
 pixels_dict["n_total"] = pixels_dict["n_x"] * pixels_dict["n_y"] * pixels_dict["n_polarity"]  # total number of pixels
-pixels_dict["active"] = sorted(set(range(pixels_dict["n_total"])) - set(pixels_blocklist))  # active pixels
-pixels_dict["n_active"] = len(pixels_dict["active"])  # number of active pixels
 
-n_in = pixels_dict["n_active"]  # number of input neurons = 1196
+n_in = pixels_dict["n_total"]  # number of input neurons = 1196
 n_rec = 150  # number of recurrent neurons
 n_out = 10  # number of readout neurons
 
@@ -483,8 +475,8 @@ tools.constrain_weights(
 # for training and test data, ensuring that the dataset is ready for loading and processing.
 
 # The `load_image` function reads a single image file from the dataset, converting the event-based neuromorphic
-# data into a format suitable for processing by spiking neural networks. It filters events based on specified
-# pixel blocklists, arranging the remaining events into a structured format representing the image.
+# data into a format suitable for processing by spiking neural networks. It arranges the events into a
+# structured format representing the image.
 
 # The `DataLoader` class facilitates the loading of the dataset for neural network training and testing. It
 # supports selecting specific labels for inclusion, allowing for targeted training on subsets of the dataset.
@@ -530,21 +522,29 @@ def download_and_extract_nmnist_dataset(save_path="./"):
 
 def load_image(file_path, pixels_dict):
     with open(file_path, "rb") as f:
-        byte_array = np.asarray([x for x in f.read()])
+        byte_array = np.frombuffer(f.read(), dtype=np.uint8)
 
     n_byte_columns = 5
-    byte_columns = [byte_array[column::n_byte_columns] for column in range(n_byte_columns)]
+    byte_array = byte_array.reshape(-1, n_byte_columns)
 
-    x_coords = byte_columns[0]  # in pixels
-    y_coords = byte_columns[1]  # in pixels
-    polarities = byte_columns[2] >> 7  # 0 for OFF, 1 for ON
-    mask_22_bit = 0x7FFFFF  # mask to keep only lower 22 bits
-    times = (byte_columns[2] << 16 | byte_columns[3] << 8 | byte_columns[4]) & mask_22_bit  # in microseconds
+    x_coords = byte_array[:, 0].astype(np.int64)  # in pixels
+    y_coords = byte_array[:, 1].astype(np.int64)  # in pixels
+
+    byte2 = byte_array[:, 2].astype(np.uint64)
+    byte3 = byte_array[:, 3].astype(np.uint64)
+    byte4 = byte_array[:, 4].astype(np.uint64)
+
+    polarities = (byte2 >> 7).astype(np.int64)  # 0 for OFF, 1 for ON
+
+    mask_22_bit = np.uint64(0x7FFFFF)  # mask to keep only lower 22 bits
+    times = (((byte2 & 0x7F) << 16) | (byte3 << 8) | byte4) & mask_22_bit
+    times = times.astype(np.int64)  # in microseconds
     time_max = 336040  # in microseconds, longest recording over training and test set
     times = np.around(times * duration["sequence"] / time_max)  # map sample to sequence length
 
     pixels = polarities * pixels_dict["n_x"] * pixels_dict["n_y"] + y_coords * pixels_dict["n_x"] + x_coords
-    image = [times[pixels == pixel] for pixel in pixels_dict["active"]]
+    sort_idx = np.lexsort((times, pixels))
+    image = np.split(times[sort_idx], np.searchsorted(pixels[sort_idx], np.arange(1, pixels_dict["n_total"])))
     return image
 
 
