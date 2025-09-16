@@ -101,7 +101,6 @@ protected:
 
   //! Interval between two activations.
   long activation_interval_;
-  bool previous_event_was_activation_;
   long last_event_time_;
 
   /**

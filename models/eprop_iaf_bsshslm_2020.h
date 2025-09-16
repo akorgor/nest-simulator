@@ -402,9 +402,6 @@ private:
     //! Binary input spike state variable - 1.0 if the neuron has spiked in the previous time step and 0.0 otherwise.
     double z_in_;
 
-    //! Previous event was an activation event.
-    bool previous_event_was_activation_;
-
     //! Default constructor.
     State_();
 

@@ -541,6 +541,11 @@ eprop_synapse_bsshslm_2020< targetidentifierT >::send( Event& e,
   const long t_spike = e.get_stamp().get_steps();
   const bool pure_activation = e.get_pure_activation();
 
+  if ( pure_activation and previous_event_was_activation_ )
+  {
+    return false;
+  }
+
   if ( ( not pure_activation ) and previous_event_was_activation_ )
   {
     t_spike_previous_ = t_spike;

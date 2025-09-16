@@ -76,15 +76,13 @@ parrot_neuron::update( Time const& origin, const long from, const long to )
         set_spiketime( Time::step( t + 1 ) );
       }
       last_event_time_ = t;
-      previous_event_was_activation_ = false;
     }
-    else if ( not previous_event_was_activation_ and t - last_event_time_ >= activation_interval_ )
+    else if ( t - last_event_time_ >= activation_interval_ )
     {
       SpikeEvent se;
       se.set_pure_activation();
       kernel().event_delivery_manager.send( *this, se, lag );
       last_event_time_ = t;
-      previous_event_was_activation_ = true;
     }
   }
 }

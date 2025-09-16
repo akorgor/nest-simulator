@@ -96,7 +96,6 @@ eprop_iaf_bsshslm_2020::State_::State_()
   , v_m_( 0.0 )
   , z_( 0.0 )
   , z_in_( 0.0 )
-  , previous_event_was_activation_( false )
 {
 }
 
@@ -323,16 +322,14 @@ eprop_iaf_bsshslm_2020::update( Time const& origin, const long from, const long 
       S_.z_ = 1.0;
       S_.r_ = V_.RefractoryCounts_;
       set_last_event_time( t );
-      S_.previous_event_was_activation_ = false;
     }
-    else if ( not S_.previous_event_was_activation_ and get_last_event_time() > 0
+    else if ( get_last_event_time() > 0
       and t - get_last_event_time() >= P_.activation_interval_ * update_interval )
     {
       SpikeEvent se;
       se.set_pure_activation();
       kernel().event_delivery_manager.send( *this, se, lag );
       set_last_event_time( t );
-      S_.previous_event_was_activation_ = true;
     }
 
     append_new_eprop_history_entry( t );
