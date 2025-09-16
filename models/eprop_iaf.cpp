@@ -420,6 +420,10 @@ eprop_iaf::compute_gradient( const long t_spike,
   const long t_compute_until = std::min( t_spike_previous + V_.eprop_isi_trace_cutoff_steps_, t_spike );
   const long cutoff_to_spike_interval = previous_event_was_activation ? t_spike - t_spike_previous : t_spike - t_compute_until;
 
+  const auto kappa_ = P_.kappa_;
+  const auto kappa_reg_ = P_.kappa_reg_;
+  const auto P_v_m_ = V_.P_v_m_;
+
   if ( not previous_event_was_activation )
   {
 
@@ -433,10 +437,10 @@ eprop_iaf::compute_gradient( const long t_spike,
       L = eprop_hist_it->learning_signal_;
       firing_rate_reg = eprop_hist_it->firing_rate_reg_;
 
-      z_bar = V_.P_v_m_ * z_bar + z;
+      z_bar = P_v_m_ * z_bar + z;
       e = psi * z_bar;
-      e_bar = P_.kappa_ * e_bar + e;
-      e_bar_reg = P_.kappa_reg_ * e_bar_reg + ( 1.0 - P_.kappa_reg_ ) * e;
+      e_bar = kappa_ * e_bar + e;
+      e_bar_reg = kappa_reg_ * e_bar_reg + ( 1.0 - kappa_reg_ ) * e;
 
       sum_grad += L * e_bar + firing_rate_reg * e_bar_reg;
     }
@@ -444,9 +448,9 @@ eprop_iaf::compute_gradient( const long t_spike,
 
   if ( cutoff_to_spike_interval > 0 )
   {
-    z_bar *= std::exp( std::log( V_.P_v_m_ ) * cutoff_to_spike_interval );
-    e_bar *= std::exp( std::log( P_.kappa_ ) * cutoff_to_spike_interval );
-    e_bar_reg *= std::exp( std::log( P_.kappa_reg_ ) * cutoff_to_spike_interval );
+    z_bar *= std::exp( std::log( P_v_m_ ) * cutoff_to_spike_interval );
+    e_bar *= std::exp( std::log( kappa_ ) * cutoff_to_spike_interval );
+    e_bar_reg *= std::exp( std::log( kappa_reg_ ) * cutoff_to_spike_interval );
   }
 
   if ( not pure_activation )

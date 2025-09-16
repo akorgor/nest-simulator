@@ -337,6 +337,8 @@ eprop_readout::compute_gradient( const long t_spike,
 
   const long cutoff_to_spike_interval = previous_event_was_activation ? t_spike - t_spike_previous : t_spike - t_compute_until;
 
+  const auto P_v_m_ = V_.P_v_m_;
+
   if ( not previous_event_was_activation )
   {
 
@@ -348,7 +350,7 @@ eprop_readout::compute_gradient( const long t_spike,
 
       L = eprop_hist_it->error_signal_;
 
-      z_bar = V_.P_v_m_ * z_bar + z;
+      z_bar = P_v_m_ * z_bar + z;
 
       sum_grad += L * z_bar;
     }
