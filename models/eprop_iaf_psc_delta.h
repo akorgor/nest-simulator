@@ -482,6 +482,15 @@ private:
     //! Interval between two activations.
     long activation_interval_;
 
+    //! If True, the neuron is an ignore-and-fire neuron.
+    bool ignore_and_fire_;
+
+    //! Phase
+    double phase_;
+
+    //! Firing rate (spikes/s).
+    double rate_;
+
     //! Default constructor.
     Parameters_();
 
@@ -545,6 +554,12 @@ private:
   //! Structure of internal variables.
   struct Variables_
   {
+    //! Phase steps.
+    long phase_steps_;
+
+    //! Firing period steps.
+    long firing_period_steps_;
+
     //! Propagator matrix entry for evolving the membrane voltage (mathematical symbol "alpha" in user documentation).
     double P_v_m_;
 
@@ -595,6 +610,13 @@ private:
 
   //! Map storing a static set of recordables.
   static RecordablesMap< eprop_iaf_psc_delta > recordablesMap_;
+
+  inline void
+  calc_initial_variables_()
+  {
+    V_.firing_period_steps_ = Time( Time::ms( 1. / P_.rate_ * 1000. ) ).get_steps();
+    V_.phase_steps_ = Time( Time::ms( P_.phase_ / P_.rate_ * 1000. ) ).get_steps();
+  }
 };
 
 inline long
@@ -688,6 +710,11 @@ eprop_iaf_psc_delta::set_status( const DictionaryDatum& d )
 
   P_ = ptmp;
   S_ = stmp;
+
+  if ( P_.ignore_and_fire_ )
+  {
+    calc_initial_variables_();
+  }
 }
 
 } // namespace nest

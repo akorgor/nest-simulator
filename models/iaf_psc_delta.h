@@ -276,6 +276,15 @@ private:
     bool with_refr_input_; //!< spikes arriving during refractory period are
                            //!< counted
 
+    //! If True, the neuron is an ignore-and-fire neuron.
+    bool ignore_and_fire_;
+
+    //! Phase
+    double phase_;
+
+    //! Firing rate (spikes/s).
+    double rate_;
+
     Parameters_(); //!< Sets default parameter values
 
     void get( DictionaryDatum& ) const; //!< Store current values in dictionary
@@ -341,6 +350,11 @@ private:
    */
   struct Variables_
   {
+    //! Phase steps.
+    long phase_steps_;
+
+    //! Firing period steps.
+    long firing_period_steps_;
 
     double P30_;
     double P33_;
@@ -373,6 +387,13 @@ private:
 
   //! Mapping of recordables names to access functions
   static RecordablesMap< iaf_psc_delta > recordablesMap_;
+
+  inline void
+  calc_initial_variables_()
+  {
+    V_.firing_period_steps_ = Time( Time::ms( 1. / P_.rate_ * 1000. ) ).get_steps();
+    V_.phase_steps_ = Time( Time::ms( P_.phase_ / P_.rate_ * 1000. ) ).get_steps();
+  }
 };
 
 
@@ -440,6 +461,11 @@ iaf_psc_delta::set_status( const DictionaryDatum& d )
   // if we get here, temporaries contain consistent set of properties
   P_ = ptmp;
   S_ = stmp;
+
+  if ( P_.ignore_and_fire_ )
+  {
+    calc_initial_variables_();
+  }
 }
 
 } // namespace

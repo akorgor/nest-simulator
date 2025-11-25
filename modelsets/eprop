@@ -11,6 +11,7 @@ step_rate_generator
 
 rate_connection_delayed
 static_synapse
+iaf_psc_delta
 
 eprop_iaf_bsshslm_2020
 eprop_iaf_adapt_bsshslm_2020
