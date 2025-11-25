@@ -77,7 +77,6 @@ References
 
 from IPython.display import Image
 from cycler import cycler
-from mpi4py import MPI
 from pathlib import Path
 from toolbox import Tools
 import matplotlib as mpl
@@ -228,8 +227,7 @@ params_setup = dict(
 nest.ResetKernel()
 nest.set(**params_setup)
 
-comm = MPI.COMM_WORLD
-rank = comm.Get_rank()
+rank = nest.Rank()
 
 nest.set_verbosity("M_FATAL")
 
@@ -278,13 +276,8 @@ params_nrn_rec = dict(
     tau_m=config["tau_m"],
     V_m=0.0,
     V_th=config["V_th"],  # mV, spike threshold membrane voltage
+    V_reset=config["V_reset"]  # mv, reset membrane voltage
 )
-
-if config["model_nrn_rec"] == "eprop_iaf_adapt":
-    params_nrn_rec["adapt_beta"] = 0.0  # adaptation scaling
-
-if config["model_nrn_rec"] in ["eprop_iaf_psc_delta", "eprop_iaf_psc_delta_adapt"]:
-    params_nrn_rec["V_reset"] = config["V_reset"]  # mV, reset membrane voltage
 
 ####################
 
@@ -455,6 +448,7 @@ if config["record_dynamics"]:
     nest.Connect(mm_rec, nrns_rec_record, params_conn_all_to_all, params_syn_static)
 nest.Connect(mm_out, nrns_out, params_conn_all_to_all, params_syn_static)
 
+# TODO check if this function still works after refactoring
 tools.constrain_weights(
     nrns_in,
     nrns_rec,
@@ -757,7 +751,7 @@ class TrainingPipeline:
         if do_early_stopping:
             for self.k_iter in np.arange(0, n_iter_train, n_iter_validate_every):
                 self.run_phase("validation", eta_test, n_iter_validate, data_loader_test, True)
-                self.run_phase("validation", eta_test, n_iter_validate, data_loader_test, True)
+                self.run_phase("validation", eta_test, 1, data_loader_test, True)
                 if self.k_iter > 0 and self.error < stop_crit:
                     self.run_phase("early-stopping", eta_test, n_iter_early_stop, data_loader_test, True)
                     self.run_phase("early-stopping", eta_test, 1, data_loader_test, True)

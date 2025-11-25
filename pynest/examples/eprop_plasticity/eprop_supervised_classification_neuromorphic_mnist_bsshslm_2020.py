@@ -76,7 +76,6 @@ References
 
 from IPython.display import Image
 from cycler import cycler
-from mpi4py import MPI
 from pathlib import Path
 from toolbox import Tools
 import matplotlib as mpl
@@ -103,8 +102,12 @@ except Exception:
 # ~~~~~
 
 config = dict(
+    E_L=-0.1,
+    E_L_out=-0.1,
+    V_reset=-0.3,
+    V_th=0.85,
     average_gradient=False,
-    batch_size=1,
+    batch_size=100,
     c_reg=50.0,
     constrain_weights_dale_in=False,
     constrain_weights_dale_out=False,
@@ -112,30 +115,36 @@ config = dict(
     constrain_weights_sign_in=False,
     constrain_weights_sign_out=False,
     constrain_weights_sign_rec=False,
+    cpus_per_task=1,
     dataset_dir="./",
-    do_early_stopping=False,
+    do_early_stopping=True,
     eta=5e-3,
     exc_to_inh_ratio=1.0,
-    learning_window=10,
+    f_target=10.0,
+    learning_window=300,
     loss="cross_entropy",
     model_nrn_rec="eprop_iaf_bsshslm_2020",
-    n_iter_test=1,
-    n_iter_train=5,
+    n_iter_test=10,
+    n_iter_train=400,
     n_iter_validate_every=10,
-    record_dynamics=True,
+    nodes=1,
+    ntasks_per_node=1,
+    record_dynamics=False,
     recordings_dir="./",
+    recurrent_connectivity=0.1,
     reset_neurons=True,
+    scale_weight_in_rec=0.03,
+    scale_weight_out_rec=10.0,
+    scale_weight_rec_out=0.006,
+    scale_weight_rec_rec=0.02,
     seed=1,
-    sparsity_level_in_rec=0.75,
-    sparsity_level_rec_rec=0.99,
-    sparsity_level_rec_out=0.0,
+    stop_crit=0.07,
     surrogate_gradient="piecewise_linear",
     surrogate_gradient_beta=1.7,
     surrogate_gradient_gamma=0.5,
-    stop_crit=0.07,
-    nodes=1,
-    cpus_per_task=1,
-    ntasks_per_node=1,
+    t_ref=4.0,
+    tau_m=10.0,
+    tau_m_out=100.0,
 )
 
 tools = Tools(config, __file__)
@@ -172,29 +181,29 @@ n_iter_validate = 1  # number of validation iterations to average over
 n_iter_early_stop = 8  # number of iterations to average over to evaluate early stopping condition
 stop_crit = config["stop_crit"]  # error value corresponding to stop criterion for early stopping
 
-steps = {
-    "sequence": 300,  # time steps of one full sequence
-    "learning_window": config["learning_window"],  # time steps of window with non-zero learning signals
-}
+steps = dict(
+    sequence=300,  # time steps of one full sequence
+    learning_window=config["learning_window"],  # time steps of window with non-zero learning signals
+)
 
 steps.update(
-    {
-        "offset_gen": 1,  # offset since generator signals start from time step 1
-        "delay_in_rec": 1,  # connection delay between input and recurrent neurons
-        "delay_rec_out": 1,  # connection delay between recurrent and output neurons
-        "delay_out_norm": 1,  # connection delay between output neurons for normalization
-        "extension_sim": 1,  # extra time step to close right-open simulation time interval in Simulate()
-        "final_update": 3,  # extra time steps to update all synapses at the end of task
-    }
+    dict(
+        offset_gen=1,  # offset since generator signals start from time step 1
+        delay_in_rec=1,  # connection delay between input and recurrent neurons
+        delay_rec_out=1,  # connection delay between recurrent and output neurons
+        delay_out_norm=1,  # connection delay between output neurons for normalization
+        extension_sim=1,  # extra time step to close right-open simulation time interval in Simulate()
+        final_update=3,  # extra time steps to update all synapses at the end of task
+    )
 )
 
 steps["delays"] = steps["delay_in_rec"] + steps["delay_rec_out"] + steps["delay_out_norm"]  # time steps of delays
 
 steps["total_offset"] = steps["offset_gen"] + steps["delays"]  # time steps of total offset
 
-duration = {"step": 1.0}  # ms, temporal resolution of the simulation
+duration = dict(step=1.0)  # ms, temporal resolution of the simulation
 
-duration.update({key: value * duration["step"] for key, value in steps.items()})  # ms, durations
+duration.update(dict((key, value * duration["step"]) for key, value in steps.items()))  # ms, durations
 
 # %% ###########################################################################################################
 # Set up simulation
@@ -202,25 +211,25 @@ duration.update({key: value * duration["step"] for key, value in steps.items()})
 # As last step of the setup, we reset the NEST kernel to remove all existing NEST simulation settings and
 # objects and set some NEST kernel parameters, some of which are e-prop-related.
 
-params_setup = {
-    "eprop_learning_window": duration["learning_window"],
-    "eprop_reset_neurons_on_update": config["reset_neurons"],  # if True, reset dynamic variables at start of each update interval
-    "eprop_update_interval": duration["sequence"],  # ms, time interval for updating the synaptic weights
-    "print_time": False,  # if True, print time progress bar during simulation, set False if run as code cell
-    "resolution": duration["step"],
-    "total_num_virtual_procs": total_num_virtual_procs,  # number of virtual processes, set in case of distributed computing
-    "local_num_threads": local_num_threads,
-    "overwrite_files": False,  # if True, overwrite existing files
-    "data_path": f"{config["recordings_dir"]}",  # path to save data to
-}
+params_setup = dict(
+    eprop_learning_window=duration["learning_window"],
+    eprop_reset_neurons_on_update=config["reset_neurons"],  # if True, reset dynamic variables at start of each update interval
+    eprop_update_interval=duration["sequence"],  # ms, time interval for updating the synaptic weights
+    print_time=False,  # if True, print time progress bar during simulation, set False if run as code cell
+    resolution=duration["step"],
+    total_num_virtual_procs=total_num_virtual_procs,  # number of virtual processes, set in case of distributed computing
+    local_num_threads=local_num_threads,
+    overwrite_files=False,  # if True, overwrite existing files
+    data_path=f"{config["recordings_dir"]}",  # path to save data to
+    rng_seed=rng_seed,  # seed for random number generator
+)
 
 ####################
 
 nest.ResetKernel()
 nest.set(**params_setup)
 
-comm = MPI.COMM_WORLD
-rank = comm.Get_rank()
+rank = nest.Rank()
 
 nest.set_verbosity("M_FATAL")
 
@@ -230,52 +239,45 @@ nest.set_verbosity("M_FATAL")
 # We proceed by creating a certain number of input, recurrent, and readout neurons and setting their parameters.
 # Additionally, we already create an input spike generator and an output target rate generator, which we will
 # configure later. Each input sample is mapped out to a 34x34 pixel grid and a polarity dimension. We allocate
-# Poisson generators to each input image pixel to simulate spike events. However, due to the observation
-# that some pixels either never record events or do so infrequently, we maintain a blocklist of these inactive
-# pixels. By omitting Poisson generators for pixels on this blocklist, we effectively reduce the total number of
-# input neurons and Poisson generators required, optimizing the network's resource usage.
+# Poisson generators to each input image pixel to simulate spike events.
 
-pixels_blocklist = np.loadtxt(Path(config["blocklist_dir"]) / "NMNIST_pixels_blocklist.txt")
-
-pixels_dict = {
-    "n_x": 34,  # number of pixels in horizontal direction
-    "n_y": 34,  # number of pixels in vertical direction
-    "n_polarity": 2,  # number of pixels in the dimension coding for polarity
-}
+pixels_dict = dict(
+    n_x=34,  # number of pixels in horizontal direction
+    n_y=34,  # number of pixels in vertical direction
+    n_polarity=2,  # number of pixels in the dimension coding for polarity
+)
 
 pixels_dict["n_total"] = pixels_dict["n_x"] * pixels_dict["n_y"] * pixels_dict["n_polarity"]  # total number of pixels
-pixels_dict["active"] = sorted(set(range(pixels_dict["n_total"])) - set(pixels_blocklist))  # active pixels
-pixels_dict["n_active"] = len(pixels_dict["active"])  # number of active pixels
 
-n_in = pixels_dict["n_active"]  # number of input neurons
+n_in = pixels_dict["n_total"]  # number of input neurons = 1196
 n_rec = 150  # number of recurrent neurons
 n_out = 10  # number of readout neurons
 
-params_nrn_out = {
-    "C_m": 1.0,  # pF, membrane capacitance - takes effect only if neurons get current input (here not the case)
-    "E_L": 0.0,  # mV, leak / resting membrane potential
-    "I_e": 0.0,  # pA, external current input
-    "loss": config["loss"],  # loss function
-    "regular_spike_arrival": False,  # If True, input spikes arrive at end of time step, if False at beginning
-    "tau_m": 80.0,  # ms, membrane time constant
-    "V_m": 0.0,  # mV, initial value of the membrane voltage
-}
+params_nrn_out = dict(
+    C_m=1.0,  # pF, membrane capacitance - takes effect only if neurons get current input (here not the case)
+    E_L=config["E_L_out"],  # mV, leak / resting membrane potential
+    I_e=0.0,  # pA, external current input
+    loss=config["loss"],  # loss function
+    regular_spike_arrival=False,  # If True, input spikes arrive at end of time step, if False at beginning
+    tau_m=config["tau_m_out"],  # ms, membrane time constant
+    V_m=0.0,  # mV, initial value of the membrane voltage
+)
 
-params_nrn_rec = {
-    "beta": config["surrogate_gradient_beta"],  # width scaling of the pseudo-derivative
-    "C_m": 1.0,
-    "c_reg": config["c_reg"],  # coefficient of firing rate regularization
-    "E_L": 0.0,
-    "f_target": 10.0,  # spikes/s, target firing rate for firing rate regularization
-    "gamma": config["surrogate_gradient_gamma"],  # height scaling of the pseudo-derivative
-    "I_e": 0.0,
-    "regular_spike_arrival": True,
-    "surrogate_gradient_function": config["surrogate_gradient"],  # surrogate gradient / pseudo-derivative function
-    "t_ref": 0.0,  # ms, duration of refractory period
-    "tau_m": 10.0,
-    "V_m": 0.0,
-    "V_th": 0.6,  # mV, spike threshold membrane voltage
-}
+params_nrn_rec = dict(
+    beta=config["surrogate_gradient_beta"],  # width scaling of the pseudo-derivative
+    C_m=1.0,
+    c_reg=config["c_reg"],  # coefficient of firing rate regularization
+    E_L=config["E_L"],
+    f_target=config["f_target"],  # spikes/s, target firing rate for firing rate regularization
+    gamma=config["surrogate_gradient_gamma"],  # height scaling of the pseudo-derivative
+    I_e=0.0,
+    regular_spike_arrival=True,
+    surrogate_gradient_function=config["surrogate_gradient"],  # surrogate gradient / pseudo-derivative function
+    t_ref=config["t_ref"],  # ms, duration of refractory period
+    tau_m=config["tau_m"],
+    V_m=0.0,
+    V_th=config["V_th"],  # mV, spike threshold membrane voltage
+)
 
 ####################
 
@@ -307,39 +309,39 @@ n_record_w = 5  # number of senders and targets to record weights from - this sc
 if n_record == 0 or n_record_w == 0:
     raise ValueError("n_record and n_record_w >= 1 required")
 
-params_mm_rec = {
-    "interval": duration["step"],  # interval between two recorded time points
-    "record_from": ["V_m", "surrogate_gradient", "learning_signal"],  # dynamic variables to record
-    "start": duration["offset_gen"] + duration["delay_in_rec"],  # start time of recording
-    "label": "multimeter_rec",
-}
+params_mm_rec = dict(
+    interval=duration["step"],  # interval between two recorded time points
+    record_from=["V_m", "surrogate_gradient", "learning_signal"],  # dynamic variables to record
+    start=duration["offset_gen"] + duration["delay_in_rec"],  # start time of recording
+    label="multimeter_rec",
+)
 
-params_mm_out = {
-    "interval": duration["step"],
-    "record_from": ["readout_signal", "target_signal"],
-    "start": duration["total_offset"],
-    "label": "multimeter_out",
-}
+params_mm_out = dict(
+    interval=duration["step"],
+    record_from=["readout_signal", "target_signal"],
+    start=duration["total_offset"],
+    label="multimeter_out",
+)
 
-params_wr = {
-    "senders": nrns_in[:n_record_w] + nrns_rec[:n_record_w],  # limit senders to subsample weights to record
-    "targets": nrns_rec[:n_record_w] + nrns_out,  # limit targets to subsample weights to record from
-    "start": duration["total_offset"],
-    "label": "weight_recorder",
-}
+params_wr = dict(
+    senders=nrns_in[:n_record_w] + nrns_rec[:n_record_w],  # limit senders to subsample weights to record
+    targets=nrns_rec[:n_record_w] + nrns_out,  # limit targets to subsample weights to record from
+    start=duration["total_offset"],
+    label="weight_recorder",
+)
 
-params_sr_in = {
-    "start": duration["offset_gen"],
-    "label": "spike_recorder_in",
-}
+params_sr_in = dict(
+    start=duration["offset_gen"],
+    label="spike_recorder_in",
+)
 
-params_sr_rec = {
-    "start": duration["offset_gen"],
-    "label": "spike_recorder_rec",
-}
+params_sr_rec = dict(
+    start=duration["offset_gen"],
+    label="spike_recorder_rec",
+)
 
 for params in [params_mm_rec, params_mm_out, params_wr, params_sr_in, params_sr_rec]:
-    params.update({"record_to": "ascii", "precision": 16})
+    params.update(dict(record_to="ascii", precision=16))
 
 ####################
 
@@ -359,124 +361,86 @@ nrns_rec_record = nrns_rec[:n_record]
 # Create connections
 # ~~~~~~~~~~~~~~~~~~
 # Now, we define the connectivity and set up the synaptic parameters, with the synaptic weights drawn from
-# normal distributions. After these preparations, we establish the enumerated connections of the core network,
-# as well as additional connections to the recorders. For this task, we implement a method characterized by
-# sparse connectivity designed to enhance resource efficiency during the learning phase. This method involves
-# the creation of binary masks that reflect predetermined levels of sparsity across various network connections,
-# namely from input-to-recurrent, recurrent-to-recurrent, and recurrent-to-output. These binary masks are
-# applied directly to the corresponding weight matrices. Subsequently, we activate only connections
-# corresponding to non-zero weights to achieve the targeted sparsity level. For instance, a sparsity level of
-# 0.9 means that most connections are turned off. This approach reduces resource consumption and, ideally,
-# boosts the learning process's efficiency.
+# random distributions. After these preparations, we establish the enumerated connections of the core network,
+# as well as additional connections to the recorders.
 
-params_conn_all_to_all = {"rule": "all_to_all", "allow_autapses": False}
-params_conn_one_to_one = {"rule": "one_to_one"}
+params_conn_all_to_all = dict(rule="all_to_all", allow_autapses=False)
+params_conn_one_to_one = dict(rule="one_to_one")
 
-
-def calculate_glorot_dist(fan_in, fan_out):
-    glorot_scale = 1.0 / max(1.0, (fan_in + fan_out) / 2.0)
-    glorot_limit = np.sqrt(3.0 * glorot_scale)
-    glorot_distribution = np.random.uniform(low=-glorot_limit, high=glorot_limit, size=(fan_in, fan_out))
-    return glorot_distribution
-
-
-weights_in_rec = np.array(np.random.randn(n_in, n_rec).T / np.sqrt(n_in))
-weights_rec_rec = np.array(np.random.randn(n_rec, n_rec).T / np.sqrt(n_rec))
-np.fill_diagonal(weights_rec_rec, 0.0)  # since no autapses set corresponding weights to zero
-weights_rec_out = np.array(calculate_glorot_dist(n_rec, n_out).T)
-weights_out_rec = np.array(np.random.randn(n_rec, n_out))
-
-def create_mask(weights, sparsity_level):
-    return np.random.choice([0, 1], weights.shape, p=[sparsity_level, 1 - sparsity_level])
-
-def get_weight_recorder_senders_targets(weights, sender_pop, target_pop):
-    target_idc, sender_idc = np.where(weights)
-    senders = sender_pop[np.unique(sender_idc[:n_record_w])]
-    targets = target_pop[np.unique(target_idc[:n_record_w])]
-    return senders, targets
-
-weights_in_rec *= create_mask(weights_in_rec, config["sparsity_level_in_rec"])
-weights_rec_rec *= create_mask(weights_rec_rec, config["sparsity_level_rec_rec"])
-weights_rec_out *= create_mask(weights_rec_out, config["sparsity_level_rec_out"])
-
-senders_in_rec, targets_in_rec = get_weight_recorder_senders_targets(weights_in_rec, nrns_in, nrns_rec)
-senders_rec_rec, targets_rec_rec = get_weight_recorder_senders_targets(weights_rec_rec, nrns_rec, nrns_rec)
-senders_rec_out, targets_rec_out = get_weight_recorder_senders_targets(weights_rec_out, nrns_rec, nrns_out)
-
-if config["record_dynamics"]:
-    params_wr["senders"] = np.unique(np.concatenate([senders_in_rec, senders_rec_rec, senders_rec_out]))
-    params_wr["targets"] = np.unique(np.concatenate([targets_in_rec, targets_rec_rec, targets_rec_out]))
-
-    nest.SetStatus(wr, params_wr)
-
-params_common_syn_eprop = {
-    "optimizer": {
-        "type": "gradient_descent",  # algorithm to optimize the weights
-        "batch_size": batch_size,
-        "Wmin": -100.0,  # pA, minimal limit of the synaptic weights
-        "Wmax": 100.0,  # pA, maximal limit of the synaptic weights
-    },
-    "average_gradient": config["average_gradient"],  # if True, average the gradient over the learning window
-}
+params_common_syn_eprop = dict(
+    optimizer=dict(
+        type="gradient_descent",  # algorithm to optimize the weights
+        batch_size=batch_size,
+        Wmin=-100.0,  # pA, minimal limit of the synaptic weights
+        Wmax=100.0,  # pA, maximal limit of the synaptic weights
+    ),
+    average_gradient=config["average_gradient"],  # if True, average the gradient over the learning window
+)
 
 eta_test = 0.0  # learning rate for test phase
 eta_train = config["eta"]  # learning rate for training phase
 
 if config["record_dynamics"]:
+    # TODO: make sure to only record from existing connections
+    nest.SetStatus(wr, params_wr)
     params_common_syn_eprop["weight_recorder"] = wr
 
-params_syn_base = {
-    "synapse_model": "eprop_synapse_bsshslm_2020",
-    "delay": duration["step"],  # ms, dendritic delay
-    "tau_m_readout": params_nrn_out["tau_m"],  # ms, for technical reasons pass readout neuron membrane time constant
-}
+params_syn_base = dict(
+    synapse_model="eprop_synapse_bsshslm_2020",
+    delay=duration["step"],  # ms, dendritic delay
+    tau_m_readout=params_nrn_out["tau_m"],  # ms, for technical reasons pass readout neuron membrane time constant
+)
 
-params_syn_in = params_syn_base.copy()
-params_syn_rec = params_syn_base.copy()
-params_syn_out = params_syn_base.copy()
+params_syn_in = dict(
+    synapse_model="eprop_synapse",
+    delay=duration["step"],
+    weight=nest.random.normal(std=config["scale_weight_in_rec"])
+)
 
-params_syn_feedback = {
-    "synapse_model": "eprop_learning_signal_connection_bsshslm_2020",
-    "delay": duration["step"],
-    "weight": weights_out_rec,
-}
+params_syn_rec = dict(
+    synapse_model="eprop_synapse",
+    delay=duration["step"],
+    weight=nest.random.normal(std=config["scale_weight_rec_rec"])
+)
 
-params_syn_out_out = {
-    "synapse_model": "rate_connection_delayed",
-    "delay": duration["step"],
-    "receptor_type": 1,  # receptor type of readout neuron to receive other readout neuron's signals for softmax
-    "weight": 1.0,  # pA, weight 1.0 required for correct softmax computation for technical reasons
-}
+params_syn_out = dict(
+    synapse_model="eprop_synapse",
+    delay=duration["step"],
+    weight=nest.random.uniform(min=-config["scale_weight_rec_out"], max=config["scale_weight_rec_out"]),
+)
 
-params_syn_rate_target = {
-    "synapse_model": "rate_connection_delayed",
-    "delay": duration["step"],
-    "receptor_type": 2,  # receptor type over which readout neuron receives target signal
-}
+params_syn_feedback = dict(
+    synapse_model="eprop_learning_signal_connection_bsshslm_2020",
+    delay=duration["step"],
+    weight=nest.random.normal(std=config["scale_weight_out_rec"]),
+)
 
-params_syn_static = {
-    "synapse_model": "static_synapse",
-    "delay": duration["step"],
-}
+params_syn_out_out = dict(
+    synapse_model="rate_connection_delayed",
+    delay=duration["step"],
+    receptor_type=1,  # receptor type of readout neuron to receive other readout neuron's signals for softmax
+    weight=1.0,  # pA, weight 1.0 required for correct softmax computation for technical reasons
+)
+
+params_syn_rate_target = dict(
+    synapse_model="rate_connection_delayed",
+    delay=duration["step"],
+    receptor_type=2,  # receptor type over which readout neuron receives target signal
+)
+
+params_syn_static = dict(
+    synapse_model="static_synapse",
+    delay=duration["step"],
+)
 
 ####################
 
 nest.SetDefaults("eprop_synapse_bsshslm_2020", params_common_syn_eprop)
 
 nest.Connect(gen_spk_in, nrns_in, params_conn_one_to_one, params_syn_static)  # connection 1
-
-def sparsely_connect(weights, params_syn, nrns_pre, nrns_post):
-    targets, sources = np.where(weights)
-    params_syn["weight"] = weights[targets, sources].flatten()
-    params_syn["delay"] = [params_syn["delay"] for _ in params_syn["weight"]]
-    nrns_pre_arr = np.array(nrns_pre.tolist())
-    nrns_post_arr = np.array(nrns_post.tolist())
-    nest.Connect(nrns_pre_arr[sources], nrns_post_arr[targets], params_conn_one_to_one, params_syn)
-
-sparsely_connect(weights_in_rec, params_syn_in, nrns_in, nrns_rec)  # connection 2
-sparsely_connect(weights_rec_rec, params_syn_rec, nrns_rec, nrns_rec)  # connection 3
-sparsely_connect(weights_rec_out, params_syn_out, nrns_rec, nrns_out)  # connection 4
-
+nest.Connect(nrns_in, nrns_rec, params_conn_all_to_all, params_syn_in) # connection 2
+nest.Connect(nrns_rec, nrns_rec, dict(rule="fixed_indegree", indegree=int(config["recurrent_connectivity"] * n_rec), allow_multapses=False, allow_autapses=False), params_syn_rec) # connection 3
+nest.Connect(nrns_rec, nrns_out, params_conn_all_to_all, params_syn_out)  # connection 4
 nest.Connect(nrns_out, nrns_rec, params_conn_all_to_all, params_syn_feedback)  # connection 5
 nest.Connect(gen_rate_target, nrns_out, params_conn_one_to_one, params_syn_rate_target)  # connection 6
 nest.Connect(nrns_out, nrns_out, params_conn_all_to_all, params_syn_out_out)  # connection 7
@@ -484,10 +448,10 @@ nest.Connect(nrns_out, nrns_out, params_conn_all_to_all, params_syn_out_out)  # 
 if config["record_dynamics"]:
     nest.Connect(nrns_in, sr_in, params_conn_all_to_all, params_syn_static)
     nest.Connect(nrns_rec, sr_rec, params_conn_all_to_all, params_syn_static)
-
     nest.Connect(mm_rec, nrns_rec_record, params_conn_all_to_all, params_syn_static)
 nest.Connect(mm_out, nrns_out, params_conn_all_to_all, params_syn_static)
 
+# TODO check if this function still works after refactoring
 tools.constrain_weights(
     nrns_in,
     nrns_rec,
@@ -620,14 +584,13 @@ def get_params_task_input_output(n_iter_interval, n_iter_curr, loader):
 
     spike_times = [[] for _ in range(n_in)]
 
-
     params_gen_rate_target = [
-        {
-            "amplitude_times": np.arange(0.0, n_iter_curr * batch_size * duration["sequence"], duration["sequence"])
+        dict(
+            amplitude_times=np.arange(0.0, n_iter_curr * batch_size * duration["sequence"], duration["sequence"])
             + iteration_offset
             + duration["total_offset"],
-            "amplitude_values": np.zeros(n_iter_curr * batch_size),
-        }
+            amplitude_values=np.zeros(n_iter_curr * batch_size),
+        )
         for _ in range(n_out)
     ]
 
@@ -643,7 +606,7 @@ def get_params_task_input_output(n_iter_interval, n_iter_curr, loader):
                         iteration_offset + (i*batch_size + batch_element) * duration["sequence"] + relative_times + duration["offset_gen"]
                     )
 
-    params_gen_spk_in = [{"spike_times": spk_times} for spk_times in spike_times]
+    params_gen_spk_in = [dict(spike_times=spk_times) for spk_times in spike_times]
 
     return params_gen_spk_in, params_gen_rate_target
 
@@ -667,7 +630,7 @@ data_loader_test = DataLoader(test_path, selected_labels, batch_size, pixels_dic
 
 gen_spk_final_update = nest.Create("spike_generator", 1)
 
-nest.Connect(gen_spk_final_update, nrns_in + nrns_rec, "all_to_all", {"weight": 1000.0})
+nest.Connect(gen_spk_final_update, nrns_in + nrns_rec, "all_to_all", dict(weight=1000.0))
 
 # %% ###########################################################################################################
 # Read out pre-training weights
@@ -687,11 +650,11 @@ def get_weights(pop_pre, pop_post):
 
 
 if config["record_dynamics"]:
-    weights_pre_train = {
-        "in_rec": get_weights(nrns_in, nrns_rec),
-        "rec_rec": get_weights(nrns_rec, nrns_rec),
-        "rec_out": get_weights(nrns_rec, nrns_out),
-    }
+    weights_pre_train = dict(
+        in_rec=get_weights(nrns_in, nrns_rec),
+        rec_rec=get_weights(nrns_rec, nrns_rec),
+        rec_out=get_weights(nrns_rec, nrns_out),
+    )
 
 # %% ###########################################################################################################
 # Simulate and evaluate
@@ -774,7 +737,7 @@ class TrainingPipeline:
         if do_early_stopping:
             for self.k_iter in np.arange(0, n_iter_train, n_iter_validate_every):
                 self.run_phase("validation", eta_test, n_iter_validate, data_loader_test, True)
-                self.run_phase("validation", eta_test, n_iter_validate, data_loader_test, True)
+                self.run_phase("validation", eta_test, 1, data_loader_test, True)
                 if self.k_iter > 0 and self.error < stop_crit:
                     self.run_phase("early-stopping", eta_test, n_iter_early_stop, data_loader_test, True)
                     self.run_phase("early-stopping", eta_test, 1, data_loader_test, True)
@@ -807,7 +770,7 @@ class TrainingPipeline:
     def evaluate_final(self):
         duration["task"] = self.n_iter_sim * batch_size * duration["sequence"] + duration["total_offset"]
 
-        gen_spk_final_update.set({"spike_times": [duration["task"] + duration["extension_sim"] + 1]})
+        gen_spk_final_update.set(dict(spike_times=[duration["task"] + duration["extension_sim"] + 1]))
 
         self.simulate(duration["final_update"])
 
@@ -826,11 +789,11 @@ n_iter_sim = training_pipeline.n_iter_sim
 # After the training, we can read out the optimized final weights.
 
 if config["record_dynamics"]:
-    weights_post_train = {
-        "in_rec": get_weights(nrns_in, nrns_rec),
-        "rec_rec": get_weights(nrns_rec, nrns_rec),
-        "rec_out": get_weights(nrns_rec, nrns_out),
-    }
+    weights_post_train = dict(
+        in_rec=get_weights(nrns_in, nrns_rec),
+        rec_rec=get_weights(nrns_rec, nrns_rec),
+        rec_out=get_weights(nrns_rec, nrns_out),
+    )
 
 # %% ###########################################################################################################
 # Read out recorders
@@ -861,13 +824,13 @@ do_plotting = False  # if True, plot the results
 if not do_plotting:
     exit()
 
-colors = {
-    "blue": "#2854c5ff",
-    "red": "#e04b40ff",
-    "green": "#25aa2cff",
-    "gold": "#f9c643ff",
-    "white": "#ffffffff",
-}
+colors = dict(
+    blue="#2854c5ff",
+    red="#e04b40ff",
+    green="#25aa2cff",
+    gold="#f9c643ff",
+    white="#ffffffff",
+)
 
 plt.rcParams.update(
     {
@@ -935,7 +898,7 @@ for title, xlims in zip(
         ((n_iter_sim - 1) * batch_size * steps["sequence"], n_iter_sim * batch_size * steps["sequence"]),
     ],
 ):
-    fig, axs = plt.subplots(9, 1, sharex=True, figsize=(8, 14), gridspec_kw={"hspace": 0.4, "left": 0.2})
+    fig, axs = plt.subplots(9, 1, sharex=True, figsize=(8, 14), gridspec_kw=dict(hspace=0.4, left=0.2))
     fig.suptitle(title)
 
     plot_spikes(axs[0], events_sr_in, r"$z_i$" + "\n", xlims)
@@ -1027,7 +990,7 @@ for k in weights_pre_train.keys():
     w_post = weights_post_train[k]["weight"]
     all_w_extrema.append([np.min(w_pre), np.max(w_pre), np.min(w_post), np.max(w_post)])
 
-args = {"cmap": cmap, "vmin": np.min(all_w_extrema), "vmax": np.max(all_w_extrema)}
+args = dict(cmap=cmap, vmin=np.min(all_w_extrema), vmax=np.max(all_w_extrema))
 
 for i, weights in zip([0, 1], [weights_pre_train, weights_post_train]):
     axs[0, i].pcolormesh(weights["in_rec"]["weight_matrix"].T, **args)
