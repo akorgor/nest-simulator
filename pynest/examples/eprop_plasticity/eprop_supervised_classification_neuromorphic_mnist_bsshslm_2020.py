@@ -393,19 +393,19 @@ params_syn_base = dict(
 )
 
 params_syn_in = dict(
-    synapse_model="eprop_synapse",
+    synapse_model="eprop_synapse_bsshslm_2020",
     delay=duration["step"],
     weight=nest.random.normal(std=config["scale_weight_in_rec"])
 )
 
 params_syn_rec = dict(
-    synapse_model="eprop_synapse",
+    synapse_model="eprop_synapse_bsshslm_2020",
     delay=duration["step"],
     weight=nest.random.normal(std=config["scale_weight_rec_rec"])
 )
 
 params_syn_out = dict(
-    synapse_model="eprop_synapse",
+    synapse_model="eprop_synapse_bsshslm_2020",
     delay=duration["step"],
     weight=nest.random.uniform(min=-config["scale_weight_rec_out"], max=config["scale_weight_rec_out"]),
 )
