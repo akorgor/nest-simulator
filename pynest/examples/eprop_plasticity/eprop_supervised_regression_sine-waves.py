@@ -46,7 +46,7 @@ which is a superposition of four sine waves of different amplitudes, phases, and
 
 Learning in the neural network model is achieved by optimizing the connection weights with e-prop plasticity.
 This plasticity rule requires a specific network architecture depicted in Figure 1. The neural network model
-consists of a recurrent network that receives frozen noise input from Poisson generators and projects onto one
+consists of a recurrent network that receives frozen noise input from spike generators and projects onto one
 readout neuron. The readout neuron compares the network signal :math:`y` with the teacher target signal
 :math:`y*`, which it receives from a rate generator. In scenarios with multiple readout neurons, each individual
 readout signal denoted as :math:`y_k` is compared with a corresponding target signal represented as
@@ -64,7 +64,7 @@ References
 .. [2] https://github.com/IGITUGraz/eligibility_propagation/blob/master/Figure_3_and_S7_e_prop_tutorials/tutorial_pattern_generation.py
 
 .. [3] Korcsak-Gorzo A, Stapmanns J, Espinoza Valverde JA, Plesser HE,
-       Dahmen D, Bolten M, Van Albada SJ*, Diesmann M*. Event-based
+       Dahmen D, Bolten M, Van Albada SJ, Diesmann M. Event-based
        implementation of eligibility propagation (in preparation)
 
 """  # pylint: disable=line-too-long # noqa: E501

@@ -44,7 +44,7 @@ processing, making it a fitting challenge for an e-prop-equipped spiking neural 
 
 Learning in the neural network model is achieved by optimizing the connection weights with e-prop plasticity.
 This plasticity rule requires a specific network architecture depicted in Figure 1. The neural network model
-consists of a recurrent network that receives input from Poisson generators and projects onto multiple readout
+consists of a recurrent network that receives input from spike generators and projects onto multiple readout
 neurons - one for each class. Each input generator is assigned to a pixel of the input image; when an event is
 detected in a pixel at time :math:`t`, the corresponding input generator (connected to an input neuron) emits a spike
 at that time. Each readout neuron compares the network signal :math:`\pi_k` with the teacher signal :math:`\pi_k^*`,
@@ -241,7 +241,7 @@ nest.set_verbosity("M_FATAL")
 # We proceed by creating a certain number of input, recurrent, and readout neurons and setting their parameters.
 # Additionally, we already create an input spike generator and an output target rate generator, which we will
 # configure later. Each input sample is mapped out to a 34x34 pixel grid and a polarity dimension. We allocate
-# Poisson generators to each input image pixel to simulate spike events.
+# spike generators to each input image pixel to simulate spike events.
 
 pixels_dict = dict(
     n_x=34,  # number of pixels in horizontal direction
