@@ -216,7 +216,7 @@ params_setup = {
     "total_num_virtual_procs": total_num_virtual_procs,  # number of virtual processes, set in case of distributed computing
     "local_num_threads": local_num_threads,
     "overwrite_files": True,  # if True, overwrite existing files
-    "data_path": f"{config["recordings_dir"]}",  # path to save data to
+    "data_path": str(config["recordings_dir"]),  # path to save data to
 }
 
 ####################

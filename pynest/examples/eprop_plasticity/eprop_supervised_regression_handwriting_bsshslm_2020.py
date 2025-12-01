@@ -205,7 +205,7 @@ params_setup = {
     "total_num_virtual_procs": args.nvp,  # number of virtual processes, set in case of distributed computing
     "rng_seed": rng_seed,  # seed for NEST random generator
     "overwrite_files": True,  # if True, overwrite existing files
-    "data_path": f"{args.recordings_dir}",  # path to save data to
+    "data_path": str(args.recordings_dir),  # path to save data to
 }
 
 ####################

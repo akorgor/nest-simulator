@@ -188,7 +188,7 @@ params_setup = {
     "resolution": duration["step"],
     "total_num_virtual_procs": args.nvp,  # number of virtual processes, set in case of distributed computing
     "overwrite_files": True,  # if True, overwrite existing files
-    "data_path": f"{args.recordings_dir}",  # path to save data to
+    "data_path": str(args.recordings_dir),  # path to save data to
 }
 
 ####################
