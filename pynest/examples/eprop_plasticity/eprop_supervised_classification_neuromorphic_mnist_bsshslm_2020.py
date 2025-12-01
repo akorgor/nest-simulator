@@ -134,6 +134,7 @@ config = dict(
     recordings_dir="./",
     recurrent_connectivity=0.1,
     reset_neurons=True,
+    save_weights=True,
     scale_weight_in_rec=0.03,
     scale_weight_out_rec=10.0,
     scale_weight_rec_out=0.006,
@@ -650,7 +651,7 @@ def get_weights(pop_pre, pop_post):
     return conns
 
 
-if config["record_dynamics"]:
+if config["save_weights"]:
     weights_pre_train = dict(
         in_rec=get_weights(nrns_in, nrns_rec),
         rec_rec=get_weights(nrns_rec, nrns_rec),
@@ -778,9 +779,7 @@ class TrainingPipeline:
 training_pipeline = TrainingPipeline()
 training_pipeline.run()
 tools.save_kernel_status(nest.GetKernelStatus())
-print("Finished successfully.")
-exit()
-training_pipeline.evaluate_final()
+# training_pipeline.evaluate_final()
 
 n_iter_sim = training_pipeline.n_iter_sim
 
@@ -789,7 +788,7 @@ n_iter_sim = training_pipeline.n_iter_sim
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # After the training, we can read out the optimized final weights.
 
-if config["record_dynamics"]:
+if config["save_weights"]:
     weights_post_train = dict(
         in_rec=get_weights(nrns_in, nrns_rec),
         rec_rec=get_weights(nrns_rec, nrns_rec),
@@ -801,8 +800,11 @@ if config["record_dynamics"]:
 # ~~~~~~~~~~~~~~~~~~
 # We can also retrieve the recorded history of the dynamic variables and weights, as well as detected spikes.
 
-if config["record_dynamics"]:
+if config["save_weights"] and comm.rank == 0:
     tools.save_weights_snapshots(weights_pre_train, weights_post_train)
+
+print("Finished successfully.")
+exit()
 
 events_mm_out = tools.get_events("multimeter_out")
 
