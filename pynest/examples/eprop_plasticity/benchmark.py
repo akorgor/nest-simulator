@@ -73,7 +73,7 @@ if n_in > 0:
     nest.Connect(nrns_in, nrns_rec, dict(rule="fixed_indegree", indegree=cfg["indegree_in"]), dict(synapse_model="static_synapse"))
 
 if "eprop" in cfg["plasticity"]:
-    nest.SetDefaults(model_syn_rec, dict(optimizer=dict(eta=0.0)))
+    nest.SetDefaults(model_syn_rec)
     nest.SetStatus(nrns_rec, dict(ignore_and_fire=True, phase=nest.random.uniform(0.0, 1.0), rate=cfg["rate_rec"]))
 
 if model_nrn_out == "iaf_psc_delta":
