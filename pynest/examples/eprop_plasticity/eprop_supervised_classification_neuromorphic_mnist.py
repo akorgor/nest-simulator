@@ -81,6 +81,7 @@ from pathlib import Path
 from toolbox import Tools
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from mpi4py import MPI
 import nest
 import numpy as np
 import requests
@@ -227,7 +228,7 @@ params_setup = dict(
 nest.ResetKernel()
 nest.set(**params_setup)
 
-rank = nest.Rank()
+comm = MPI.COMM_WORLD
 
 nest.set_verbosity("M_FATAL")
 
@@ -771,7 +772,7 @@ class TrainingPipeline:
 
         error = None
 
-        if rank == 0:
+        if comm.rank == 0:
             if self.evaluate_curr:
                 events = tools.get_events(self.prefix_previous, save=True)
                 error = self.error if events.empty else self.evaluate(events)
