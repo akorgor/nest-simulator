@@ -277,8 +277,10 @@ params_nrn_rec = dict(
     tau_m=config["tau_m"],
     V_m=0.0,
     V_th=config["V_th"],  # mV, spike threshold membrane voltage
-    V_reset=config["V_reset"]  # mv, reset membrane voltage
 )
+
+if config["model_nrn_rec"] == "eprop_iaf_psc_delta":
+   params_nrn_rec["V_reset"] = config["V_reset"]  # mv, reset membrane voltage
 
 ####################
 
