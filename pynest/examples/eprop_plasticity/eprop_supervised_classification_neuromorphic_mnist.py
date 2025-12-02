@@ -245,6 +245,7 @@ pixels_dict = dict(
     n_x=34,  # number of pixels in horizontal direction
     n_y=34,  # number of pixels in vertical direction
     n_polarity=2,  # number of pixels in the dimension coding for polarity
+    time_max = 336040  # in microseconds, longest recording over training and test set
 )
 
 pixels_dict["n_total"] = pixels_dict["n_x"] * pixels_dict["n_y"] * pixels_dict["n_polarity"]  # total number of pixels
@@ -537,12 +538,21 @@ def load_image(file_path, pixels_dict):
     mask_22_bit = np.uint64(0x7FFFFF)  # mask to keep only lower 22 bits
     times = (((byte2 & 0x7F) << 16) | (byte3 << 8) | byte4) & mask_22_bit
     times = times.astype(np.int64)  # in microseconds
-    time_max = 336040  # in microseconds, longest recording over training and test set
-    times = np.around(times * duration["sequence"] / time_max)  # map sample to sequence length
+    times = np.around(times * duration["sequence"] / pixels_dict["time_max"])  # map sample to sequence length
 
-    pixels = polarities * pixels_dict["n_x"] * pixels_dict["n_y"] + y_coords * pixels_dict["n_x"] + x_coords
-    sort_idx = np.lexsort((times, pixels))
-    image = np.split(times[sort_idx], np.searchsorted(pixels[sort_idx], np.arange(1, pixels_dict["n_total"])))
+    pixel_index = polarities * pixels_dict["n_x"] * pixels_dict["n_y"] + y_coords * pixels_dict["n_x"] + x_coords
+
+    sort_idx = np.lexsort((times, pixel_index)) # sort events first by pixel index, then by time
+    times_sorted = times[sort_idx]
+    pixels_sorted = pixel_index[sort_idx]
+
+    all_pixel_indices = np.arange(pixels_dict["n_total"])
+
+    # find, for each pixel index, its insertion point in the sorted pixel array, producing the group boundaries
+    pixel_boundaries = np.searchsorted(pixels_sorted, all_pixel_indices)
+
+    # split the sorted times at the pixel boundaries; skip the first boundary to avoid an empty initial segment
+    image = np.split(times_sorted, pixel_boundaries[1:])
     return image
 
 
