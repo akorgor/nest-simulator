@@ -1,10 +1,11 @@
-from pathlib import Path
 import json
 import math
+from collections.abc import Mapping
+from pathlib import Path
+
 import nest
 import numpy as np
 import pandas as pd
-from collections.abc import Mapping
 
 
 class Tools:
@@ -12,9 +13,10 @@ class Tools:
         self.config = config
         self.load_config()
         self.recordings_dir = Path(self.config["recordings_dir"])
+        self.recordings_dir.mkdir(parents=True, exist_ok=True)
         self.save_config()
         self.file_name = Path(file_path).name
-        # self.remove_recordings()
+        self.remove_recordings()
         self.timing_dict = dict(
             biological_time=0.0,
             time_communicate_prepare=0.0,
@@ -43,7 +45,7 @@ class Tools:
 
     def remove_recordings(self):
         for file_path in self.recordings_dir.iterdir():
-            if file_path.is_file() and (file_path.suffix in [".csv", ".dat"]):
+            if file_path.is_file() and (file_path.suffix in [".csv", ".dat", ".json"]):
                 file_path.unlink()
 
     def constrain_weights(self, nrns_in, nrns_rec, nrns_out, params_syn_base, params_common_syn_eprop):
@@ -246,9 +248,9 @@ class Tools:
             json.dump(self.make_serializable(kernel_status), f, indent=4)
 
     def save_performance(self, iteration, loss, errors, phase_label):
-            with open(self.recordings_dir / "learning_performance.csv", "a") as f:
-                for l, e in zip(loss, errors):
-                    f.write(f"{iteration},{phase_label},{l},{e}\n")
+        with open(self.recordings_dir / "learning_performance.csv", "a") as f:
+            for l, e in zip(loss, errors):
+                f.write(f"{iteration},{phase_label},{l},{e}\n")
 
     def verify(self):
         # print(self.file_name)
