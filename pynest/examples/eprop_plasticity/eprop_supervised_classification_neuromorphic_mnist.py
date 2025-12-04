@@ -75,17 +75,18 @@ References
 # ~~~~~~~~~~~~~~~~
 # We begin by importing all libraries required for the simulation, analysis, and visualization.
 
-from IPython.display import Image
-from cycler import cycler
+import zipfile
 from pathlib import Path
-from toolbox import Tools
+
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from mpi4py import MPI
 import nest
 import numpy as np
 import requests
-import zipfile
+from cycler import cycler
+from IPython.display import Image
+from mpi4py import MPI
+from toolbox import Tools
 
 # %% ###########################################################################################################
 # Schematic of network architecture
@@ -177,7 +178,9 @@ np.random.seed(rng_seed)  # fix numpy random seed
 # classification error is tested in regular intervals and the training stopped as soon as the error selected as
 # stop criterion is reached. After training, the performance can be tested over a number of test iterations.
 
-batch_size = config["batch_size"]  # number of instances over which to evaluate the learning performance, 100 for convergence
+batch_size = config[
+    "batch_size"
+]  # number of instances over which to evaluate the learning performance, 100 for convergence
 n_iter_train = config["n_iter_train"]  # number of training iterations, 200 for convergence
 n_iter_test = config["n_iter_test"]  # number of iterations for final test
 do_early_stopping = config["do_early_stopping"]  # if True, stop training as soon as stop criterion fulfilled
@@ -245,6 +248,7 @@ pixels_dict = dict(
     n_x=34,  # number of pixels in horizontal direction
     n_y=34,  # number of pixels in vertical direction
     n_polarity=2,  # number of pixels in the dimension coding for polarity
+    time_max=336040,  # in microseconds, longest recording over training and test set
 )
 
 pixels_dict["n_total"] = pixels_dict["n_x"] * pixels_dict["n_y"] * pixels_dict["n_polarity"]  # total number of pixels
@@ -281,7 +285,7 @@ params_nrn_rec = dict(
 )
 
 if config["model_nrn_rec"] == "eprop_iaf_psc_delta":
-   params_nrn_rec["V_reset"] = config["V_reset"]  # mv, reset membrane voltage
+    params_nrn_rec["V_reset"] = config["V_reset"]  # mv, reset membrane voltage
 
 ####################
 
@@ -394,15 +398,11 @@ params_syn_base = dict(
 )
 
 params_syn_in = dict(
-    synapse_model="eprop_synapse",
-    delay=duration["step"],
-    weight=nest.random.normal(std=config["scale_weight_in_rec"])
+    synapse_model="eprop_synapse", delay=duration["step"], weight=nest.random.normal(std=config["scale_weight_in_rec"])
 )
 
 params_syn_rec = dict(
-    synapse_model="eprop_synapse",
-    delay=duration["step"],
-    weight=nest.random.normal(std=config["scale_weight_rec_rec"])
+    synapse_model="eprop_synapse", delay=duration["step"], weight=nest.random.normal(std=config["scale_weight_rec_rec"])
 )
 
 params_syn_out = dict(
@@ -439,8 +439,18 @@ params_syn_static = dict(
 nest.SetDefaults("eprop_synapse", params_common_syn_eprop)
 
 nest.Connect(gen_spk_in, nrns_in, params_conn_one_to_one, params_syn_static)  # connection 1
-nest.Connect(nrns_in, nrns_rec, params_conn_all_to_all, params_syn_in) # connection 2
-nest.Connect(nrns_rec, nrns_rec, dict(rule="fixed_indegree", indegree=int(config["recurrent_connectivity"] * n_rec), allow_multapses=False, allow_autapses=False), params_syn_rec) # connection 3
+nest.Connect(nrns_in, nrns_rec, params_conn_all_to_all, params_syn_in)  # connection 2
+nest.Connect(
+    nrns_rec,
+    nrns_rec,
+    dict(
+        rule="fixed_indegree",
+        indegree=int(config["recurrent_connectivity"] * n_rec),
+        allow_multapses=False,
+        allow_autapses=False,
+    ),
+    params_syn_rec,
+)  # connection 3
 nest.Connect(nrns_rec, nrns_out, params_conn_all_to_all, params_syn_out)  # connection 4
 nest.Connect(nrns_out, nrns_rec, params_conn_all_to_all, params_syn_feedback)  # connection 5
 nest.Connect(gen_rate_target, nrns_out, params_conn_one_to_one, params_syn_rate_target)  # connection 6
@@ -537,12 +547,21 @@ def load_image(file_path, pixels_dict):
     mask_22_bit = np.uint64(0x7FFFFF)  # mask to keep only lower 22 bits
     times = (((byte2 & 0x7F) << 16) | (byte3 << 8) | byte4) & mask_22_bit
     times = times.astype(np.int64)  # in microseconds
-    time_max = 336040  # in microseconds, longest recording over training and test set
-    times = np.around(times * duration["sequence"] / time_max)  # map sample to sequence length
+    times = np.around(times * duration["sequence"] / pixels_dict["time_max"])  # map sample to sequence length
 
-    pixels = polarities * pixels_dict["n_x"] * pixels_dict["n_y"] + y_coords * pixels_dict["n_x"] + x_coords
-    sort_idx = np.lexsort((times, pixels))
-    image = np.split(times[sort_idx], np.searchsorted(pixels[sort_idx], np.arange(1, pixels_dict["n_total"])))
+    pixel_index = polarities * pixels_dict["n_x"] * pixels_dict["n_y"] + y_coords * pixels_dict["n_x"] + x_coords
+
+    sort_idx = np.lexsort((times, pixel_index))  # sort events first by pixel index, then by time
+    times_sorted = times[sort_idx]
+    pixels_sorted = pixel_index[sort_idx]
+
+    all_pixel_indices = np.arange(pixels_dict["n_total"])
+
+    # find, for each pixel index, its insertion point in the sorted pixel array, producing the group boundaries
+    pixel_boundaries = np.searchsorted(pixels_sorted, all_pixel_indices)
+
+    # split the sorted times at the pixel boundaries; skip the first boundary to avoid an empty initial segment
+    image = np.split(times_sorted, pixel_boundaries[1:])
     return image
 
 
@@ -598,13 +617,18 @@ def get_params_task_input_output(n_iter_interval, n_iter_curr, loader):
     for i in range(n_iter_curr):
         input_batch, target_batch = loader.get_new_evaluation_batch()
         for batch_element in range(batch_size):
-            params_gen_rate_target[target_batch[batch_element]]["amplitude_values"][i*batch_size + batch_element] = 1.0
+            params_gen_rate_target[target_batch[batch_element]]["amplitude_values"][
+                i * batch_size + batch_element
+            ] = 1.0
 
             for n, relative_times in enumerate(input_batch[batch_element]):
                 if len(relative_times) > 0:
                     relative_times = np.array(relative_times)
                     spike_times[n].extend(
-                        iteration_offset + (i*batch_size + batch_element) * duration["sequence"] + relative_times + duration["offset_gen"]
+                        iteration_offset
+                        + (i * batch_size + batch_element) * duration["sequence"]
+                        + relative_times
+                        + duration["offset_gen"]
                     )
 
     params_gen_spk_in = [dict(spike_times=spk_times) for spk_times in spike_times]
@@ -699,7 +723,6 @@ class TrainingPipeline:
         self.evaluate_curr = False
 
     def evaluate(self, events_mm_out):
-
         readout_signal = events_mm_out.readout_signal
         target_signal = events_mm_out.target_signal
         senders = events_mm_out.sender
@@ -731,7 +754,9 @@ class TrainingPipeline:
             return
         tools.set_synapse_defaults(eta)
 
-        params_gen_spk_in, params_gen_rate_target, params_gen_learning_window = get_params_task_input_output(self.n_iter_sim, n_iter, loader)
+        params_gen_spk_in, params_gen_rate_target, params_gen_learning_window = get_params_task_input_output(
+            self.n_iter_sim, n_iter, loader
+        )
         nest.SetStatus(gen_spk_in, params_gen_spk_in)
         nest.SetStatus(gen_rate_target, params_gen_rate_target)
         nest.SetStatus(gen_learning_window, params_gen_learning_window)
@@ -739,7 +764,9 @@ class TrainingPipeline:
         self.process()
         self.evaluate_curr = evaluate
 
-        duration["sim"] = n_iter * batch_size * duration["sequence"] - duration["total_offset"] - duration["extension_sim"]
+        duration["sim"] = (
+            n_iter * batch_size * duration["sequence"] - duration["total_offset"] - duration["extension_sim"]
+        )
 
         self.prefix_previous = f"{(self.n_iter_sim+1):05d}_{phase_label}"
         self.simulate(duration["sim"], f"{self.prefix_previous}_0_")
@@ -747,8 +774,8 @@ class TrainingPipeline:
         self.n_iter_sim += n_iter
         self.phase_label_previous = phase_label
 
-    def simulate(self, duration, data_prefix=''):
-        nest.data_prefix=data_prefix
+    def simulate(self, duration, data_prefix=""):
+        nest.data_prefix = data_prefix
         nest.Simulate(duration)
 
     def run(self):
@@ -791,6 +818,7 @@ class TrainingPipeline:
         gen_spk_final_update.set(dict(spike_times=[duration["task"] + duration["extension_sim"] + 1]))
 
         self.simulate(duration["final_update"])
+
 
 training_pipeline = TrainingPipeline()
 training_pipeline.run()
