@@ -203,6 +203,7 @@ params_nrn_out = {
 tau_m_mean = 30.0  # ms, mean of membrane time constant distribution
 
 params_nrn_rec = {
+    "activation_interval": duration["sequence"],  # ms, interval for activating synapse to free memory
     "beta": 1.0,  # width scaling of the pseudo-derivative
     "adapt_tau": 2000.0,  # ms, time constant of adaptive threshold
     "C_m": 250.0,

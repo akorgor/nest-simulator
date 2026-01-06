@@ -558,23 +558,9 @@ def test_eprop_surrogate_gradients(surrogate_gradient_type, surrogate_gradient_r
 
 
 @pytest.mark.parametrize(
-    "neuron_model,eprop_isi_trace_cutoff,eprop_history_duration_reference",
-    [
-        (
-            "eprop_iaf",
-            5.0,
-            np.hstack(
-                [
-                    np.arange(x, y)
-                    for x, y in [[1, 12], [6, 16], [11, 21], [16, 26], [21, 31], [17, 27], [12, 42], [12, 30]]
-                ]
-            ),
-        ),
-        ("eprop_iaf", 100000.0, np.hstack([np.arange(x, y) for x, y in [[1, 52], [33, 43], [23, 53], [43, 61]]])),
-        ("eprop_readout", 100000.0, np.hstack([np.arange(x, y) for x, y in [[1, 52], [33, 43], [23, 53], [43, 61]]])),
-    ],
+    "neuron_model,eprop_isi_trace_cutoff", [("eprop_iaf", 5.0), ("eprop_iaf", 100000.0), ("eprop_readout", 100000.0)]
 )
-def test_eprop_history_cleaning(neuron_model, eprop_isi_trace_cutoff, eprop_history_duration_reference):
+def test_eprop_history_cleaning(neuron_model, eprop_isi_trace_cutoff):
     """
     Test the e-prop archiving mechanism's cleaning process by ensuring that the length of the `eprop_history`
     buffer matches the expected values based on a given input firing pattern. These reference length values
@@ -659,7 +645,11 @@ def test_eprop_history_cleaning(neuron_model, eprop_isi_trace_cutoff, eprop_hist
     events_mm_rec = mm_rec.get("events")
 
     eprop_history_duration = events_mm_rec["eprop_history_duration"]
-    senders = events_mm_rec["senders"]
-    eprop_history_duration = np.array([eprop_history_duration[senders == i] for i in set(senders)])[0]
 
+    eprop_history_duration_reference = np.hstack(
+        [
+            np.arange(x, y + 1)
+            for x, y in [[1.0, 11.0], [2.0, 21.0], [12.0, 31.0], [12.0, 21.0], [12.0, 41.0], [32.0, 49.0]]
+        ]
+    )
     assert np.allclose(eprop_history_duration, eprop_history_duration_reference, rtol=1e-8)

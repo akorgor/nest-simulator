@@ -183,6 +183,7 @@ params_nrn_out = {
 }
 
 params_nrn_rec = {
+    "activation_interval": duration["sequence"],  # ms, interval for activating synapse to free memory
     "beta": 1.0,  # width scaling of the pseudo-derivative
     "C_m": 1.0,
     "c_reg": 300.0,  # coefficient of firing rate regularization
