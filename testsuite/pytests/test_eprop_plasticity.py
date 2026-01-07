@@ -585,13 +585,16 @@ def test_eprop_history_cleaning(neuron_model, eprop_isi_trace_cutoff):
 
     # Create neurons
 
-    params_nrn_rec = {
+    params_nrn = {
         "eprop_isi_trace_cutoff": eprop_isi_trace_cutoff,
     }
 
+    if neuron_model != "eprop_readout":
+        params_nrn["activation_interval"] = eprop_isi_trace_cutoff
+
     gen_spk_in = nest.Create("spike_generator", 3)
     nrns_in = nest.Create("parrot_neuron", 3)
-    nrns_rec = nest.Create(neuron_model, 1, params_nrn_rec)
+    nrns = nest.Create(neuron_model, 1, params_nrn)
 
     # Create recorders
 
@@ -621,8 +624,8 @@ def test_eprop_history_cleaning(neuron_model, eprop_isi_trace_cutoff):
     params_syn_in = params_syn_base.copy()
 
     nest.Connect(gen_spk_in, nrns_in, params_conn_one_to_one, params_syn_static)
-    nest.Connect(nrns_in, nrns_rec, params_conn_all_to_all, params_syn_in)
-    nest.Connect(mm_rec, nrns_rec, params_conn_all_to_all, params_syn_static)
+    nest.Connect(nrns_in, nrns, params_conn_all_to_all, params_syn_in)
+    nest.Connect(mm_rec, nrns, params_conn_all_to_all, params_syn_static)
 
     # Create input
 
@@ -647,9 +650,6 @@ def test_eprop_history_cleaning(neuron_model, eprop_isi_trace_cutoff):
     eprop_history_duration = events_mm_rec["eprop_history_duration"]
 
     eprop_history_duration_reference = np.hstack(
-        [
-            np.arange(x, y + 1)
-            for x, y in [[1.0, 11.0], [2.0, 21.0], [12.0, 31.0], [12.0, 21.0], [12.0, 41.0], [32.0, 49.0]]
-        ]
+        [np.arange(x, y + 1) for x, y in [[1.0, 11.0], [2.0, 51.0], [12.0, 59.0]]]
     )
     assert np.allclose(eprop_history_duration, eprop_history_duration_reference, rtol=1e-8)
