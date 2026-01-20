@@ -171,7 +171,7 @@ def test_eprop_regression():
     params_nrn_rec["beta"] /= np.abs(params_nrn_rec["V_th"])
 
     gen_spk_in = nest.Create("spike_generator", n_in)
-    nrns_in = nest.Create("parrot_neuron", n_in)
+    nrns_inp = nest.Create("parrot_neuron", n_in)
     nrns_rec = nest.Create("eprop_iaf_bsshslm_2020", n_rec, params_nrn_rec)
     nrns_out = nest.Create("eprop_readout_bsshslm_2020", n_out, params_nrn_out)
     gen_rate_target = nest.Create("step_rate_generator", n_out)
@@ -196,7 +196,7 @@ def test_eprop_regression():
     }
 
     params_wr = {
-        "senders": nrns_in[:n_record_w] + nrns_rec[:n_record_w],
+        "senders": nrns_inp[:n_record_w] + nrns_rec[:n_record_w],
         "targets": nrns_rec[:n_record_w] + nrns_out,
         "start": duration["total_offset"],
         "stop": duration["total_offset"] + duration["task"],
@@ -272,14 +272,14 @@ def test_eprop_regression():
 
     nest.SetDefaults("eprop_synapse_bsshslm_2020", params_common_syn_eprop)
 
-    nest.Connect(gen_spk_in, nrns_in, params_conn_one_to_one, params_syn_static)
-    nest.Connect(nrns_in, nrns_rec, params_conn_all_to_all, params_syn_in)
+    nest.Connect(gen_spk_in, nrns_inp, params_conn_one_to_one, params_syn_static)
+    nest.Connect(nrns_inp, nrns_rec, params_conn_all_to_all, params_syn_in)
     nest.Connect(nrns_rec, nrns_rec, params_conn_all_to_all, params_syn_rec)
     nest.Connect(nrns_rec, nrns_out, params_conn_all_to_all, params_syn_out)
     nest.Connect(nrns_out, nrns_rec, params_conn_all_to_all, params_syn_feedback)
     nest.Connect(gen_rate_target, nrns_out, params_conn_one_to_one, params_syn_rate_target)
 
-    nest.Connect(nrns_in + nrns_rec, sr, params_conn_all_to_all, params_syn_static)
+    nest.Connect(nrns_inp + nrns_rec, sr, params_conn_all_to_all, params_syn_static)
 
     nest.Connect(mm_rec, nrns_rec_record, params_conn_all_to_all, params_syn_static)
     nest.Connect(mm_out, nrns_out, params_conn_all_to_all, params_syn_static)
@@ -545,7 +545,7 @@ def test_eprop_classification(batch_size, loss_nest_reference):
     )
 
     gen_spk_in = nest.Create("spike_generator", n_in)
-    nrns_in = nest.Create("parrot_neuron", n_in)
+    nrns_inp = nest.Create("parrot_neuron", n_in)
     nrns_reg = nest.Create("eprop_iaf_bsshslm_2020", n_reg, params_nrn_reg)
     nrns_ad = nest.Create("eprop_iaf_adapt_bsshslm_2020", n_ad, params_nrn_ad)
     nrns_out = nest.Create("eprop_readout_bsshslm_2020", n_out, params_nrn_out)
@@ -580,7 +580,7 @@ def test_eprop_classification(batch_size, loss_nest_reference):
     }
 
     params_wr = {
-        "senders": nrns_in[:n_record_w] + nrns_rec[:n_record_w],
+        "senders": nrns_inp[:n_record_w] + nrns_rec[:n_record_w],
         "targets": nrns_rec[:n_record_w] + nrns_out,
         "start": duration["total_offset"],
         "stop": duration["total_offset"] + duration["task"],
@@ -681,15 +681,15 @@ def test_eprop_classification(batch_size, loss_nest_reference):
 
     nest.SetDefaults("eprop_synapse_bsshslm_2020", params_common_syn_eprop)
 
-    nest.Connect(gen_spk_in, nrns_in, params_conn_one_to_one, params_syn_static)
-    nest.Connect(nrns_in, nrns_rec, params_conn_all_to_all, params_syn_in)
+    nest.Connect(gen_spk_in, nrns_inp, params_conn_one_to_one, params_syn_static)
+    nest.Connect(nrns_inp, nrns_rec, params_conn_all_to_all, params_syn_in)
     nest.Connect(nrns_rec, nrns_rec, params_conn_all_to_all, params_syn_rec)
     nest.Connect(nrns_rec, nrns_out, params_conn_all_to_all, params_syn_out)
     nest.Connect(nrns_out, nrns_rec, params_conn_all_to_all, params_syn_feedback)
     nest.Connect(gen_rate_target, nrns_out, params_conn_one_to_one, params_syn_rate_target)
     nest.Connect(nrns_out, nrns_out, params_conn_all_to_all, params_syn_out_out)
 
-    nest.Connect(nrns_in + nrns_rec, sr, params_conn_all_to_all, params_syn_static)
+    nest.Connect(nrns_inp + nrns_rec, sr, params_conn_all_to_all, params_syn_static)
 
     nest.Connect(mm_reg, nrns_reg_record, params_conn_all_to_all, params_syn_static)
     nest.Connect(mm_ad, nrns_ad_record, params_conn_all_to_all, params_syn_static)

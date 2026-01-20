@@ -1,78 +1,117 @@
+import csv
 import json
 import math
+import shutil
+from collections import OrderedDict as odict
 from collections.abc import Mapping
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import nest
 import numpy as np
 import pandas as pd
+from cycler import cycler
 
 
 class Tools:
-    def __init__(self, config, file_path):
-        self.config = config
-        self.load_config()
-        self.recordings_dir = Path(self.config["recordings_dir"])
-        self.recordings_dir.mkdir(parents=True, exist_ok=True)
-        self.save_config()
-        self.file_name = Path(file_path).name
-        self.remove_recordings()
-        self.timing_dict = dict(
-            biological_time=0.0,
-            time_communicate_prepare=0.0,
-            time_construction_connect=0.0,
-            time_construction_create=0.0,
-            time_simulate=0.0,
+    def __init__(self, cfg, file_path):
+        cfg["file_name"] = Path(file_path).name
+        self.cfg = cfg
+        self.load_cfg()
+        np.random.seed(self.cfg["seed"])
+        self.init_results_dir()
+        self.save_cfg()
+        self.init_plotting()
+
+    def init_plotting(self):
+        self.colors = odict(
+            blue="#2854c5",
+            red="#e04b40",
+            green="#25aa2c",
+            gold="#f9c643",
+            gray="#696969",
+            orange="#f8933d",
+            black="#000000",
+            purple="#6f1970",
+            lightorange="#fab377",
+            lightred="#e98179",
+            lightgreen="#66c36b",
+            lightgray="#d3d3d3",
+            lightblue="#b8dcfd",
+            lightyellow="#fcdd91",
+            mediumgray="#b8b8b8",
+            pink="#fe5895",
+            yellow="#f9f871",
         )
+
+        plt.rcParams.update(
+            dict(
+                [
+                    ("axes.spines.right", False),
+                    ("axes.spines.top", False),
+                    ("axes.prop_cycle", cycler(color=list(self.colors.values()))),
+                    ("figure.dpi", 300),
+                    ("font.family", "DejaVu Sans"),
+                ]
+            )
+        )
+
+    def init_results_dir(self):
+        self.results_dir = Path(self.cfg["results_dir"])
+
+        if self.cfg["remove_results_dir"] and self.results_dir.exists():
+            shutil.rmtree(self.results_dir)
+
+        self.recordings_dir = self.results_dir / "recordings"
+        self.recordings_dir.mkdir(parents=True, exist_ok=True)
+        self.cfg["recordings_dir"] = str(self.recordings_dir.resolve())
+
+        if self.cfg["do_plotting"]:
+            self.figures_dir = self.results_dir / "figures"
+            self.figures_dir.mkdir(parents=True, exist_ok=True)
+            self.cfg["figures_dir"] = str(self.figures_dir.resolve())
+
+        with open(self.recordings_dir / "learning_performance.csv", "w") as f:
+            f.write("iteration,phase,loss,error\n")
 
     def deep_update(self, orig, new):
         for key, val in new.items():
-            if key in orig and isinstance(orig[key], dict) and isinstance(val, Mapping):
+            if isinstance(orig.get(key), dict) and isinstance(val, Mapping):
                 self.deep_update(orig[key], val)
             else:
                 orig[key] = val
-        return orig
 
-    def load_config(self):
-        config_path = Path(__file__).parent / "config.json"
-        if config_path.is_file():
-            with open(config_path) as f:
-                self.deep_update(self.config, json.load(f))
+    def load_cfg(self):
+        cfg_path = Path(__file__).parent / "config.json"
+        if cfg_path.exists():
+            with open(cfg_path) as f:
+                self.deep_update(self.cfg, json.load(f))
 
-    def save_config(self):
-        with open(self.recordings_dir / "config_full.json", "w") as file:
-            json.dump(self.config, file, indent=4)
+    def save_cfg(self):
+        with open(self.recordings_dir / "config_derived.json", "w") as file:
+            json.dump(self.cfg, file, indent=4)
 
-    def remove_recordings(self):
-        for file_path in self.recordings_dir.iterdir():
-            if file_path.is_file() and (file_path.suffix in [".csv", ".dat", ".json"]):
-                file_path.unlink()
-
-    def constrain_weights(self, nrns_in, nrns_rec, nrns_out, params_syn_base, params_common_syn_eprop):
+    def constrain_weights(self, nrns, params_syn_base, params_common_syn_eprop):
+        nrns_inp, nrns_rec, nrns_out = nrns
         weight_dicts = [
             dict(
-                nrns_pre=nrns_in,
+                nrns_pre=nrns_inp,
                 nrns_post=nrns_rec,
-                constrain_sign=self.config["constrain_weights_sign_in"],
-                constrain_dale=self.config["constrain_weights_dale_in"],
+                constrain_sign=self.cfg["constrain_weights_sign_in"],
+                constrain_dale=self.cfg["constrain_weights_dale_in"],
             ),
             dict(
                 nrns_pre=nrns_rec,
                 nrns_post=nrns_rec,
-                constrain_sign=self.config["constrain_weights_sign_rec"],
-                constrain_dale=self.config["constrain_weights_dale_rec"],
+                constrain_sign=self.cfg["constrain_weights_sign_rec"],
+                constrain_dale=self.cfg["constrain_weights_dale_rec"],
             ),
             dict(
                 nrns_pre=nrns_rec,
                 nrns_post=nrns_out,
-                constrain_sign=self.config["constrain_weights_sign_out"],
-                constrain_dale=self.config["constrain_weights_dale_out"],
+                constrain_sign=self.cfg["constrain_weights_sign_out"],
+                constrain_dale=self.cfg["constrain_weights_dale_out"],
             ),
-        ]
-
-        sign_dicts = [
-            dict(Wmin=0.0, Wmax=100.0),
-            dict(Wmin=-100.0, Wmax=0.0),
         ]
 
         pop_pre_arr = np.array([], dtype=int)
@@ -89,7 +128,7 @@ class Tools:
 
                 if weight_dict["constrain_dale"]:
                     source_unique = np.unique(conns_dict["source"])
-                    proportion_inh = 1.0 / (1.0 + self.config["exc_to_inh_ratio"])
+                    proportion_inh = 1.0 / (1.0 + self.cfg["exc_to_inh_ratio"])
                     sources_inh = np.random.choice(
                         source_unique, int(len(source_unique) * proportion_inh), replace=False
                     )
@@ -106,7 +145,7 @@ class Tools:
                 pop_pre_arr = np.append(pop_pre_arr, conns_dict["source"])
                 pop_post_arr = np.append(pop_post_arr, conns_dict["target"])
 
-        for sign_dict in sign_dicts:
+        for sign_dict in [dict(Wmin=0.0, Wmax=100.0), dict(Wmin=-100.0, Wmax=0.0)]:
             sign = np.sign(sign_dict["Wmin"])
             label = "positive" if sign >= 0.0 else "negative"
 
@@ -133,102 +172,171 @@ class Tools:
             if synapse_model.startswith("eprop_synapse"):
                 nest.SetDefaults(synapse_model, dict(optimizer=dict(eta=eta)))
 
-    def save_weights_snapshots(self, weights_dict_pre, weights_dict_post):
-        for phase, weights_dict in zip(["pre", "post"], [weights_dict_pre, weights_dict_post]):
-            for k, v in weights_dict.items():
-                label = f"{phase}_train_{k}"
-                v_ = {k: v[k] for k in v.keys() if k != "weight_matrix"}
-                pd.DataFrame.from_dict(v_).to_csv(self.recordings_dir / f"weights_{label}.csv", index=False)
+    def save_node_ids(self, pop_dict):
+        path = self.recordings_dir / "node_ids.csv"
+        with open(path, "w", newline="") as f:
+            w = csv.writer(f, lineterminator="\n")
+            w.writerow(["id", "label"])
+            for label, v in pop_dict.items():
+                nrn_ids = v.get("global_id")
+                if isinstance(nrn_ids, int):
+                    w.writerow([nrn_ids, label])
+                else:
+                    for nid in nrn_ids:
+                        w.writerow([nid, label])
 
-    def save_weight_recordings(self, sender_nrns, target_nrns, df, label, recorder_label):
-        sender_min = min(sender_nrns.tolist())
-        sender_max = max(sender_nrns.tolist())
-        target_min = min(target_nrns.tolist())
-        target_max = max(target_nrns.tolist())
+    def save_weights(self, pop_pre, pop_post, label):
+        path = self.recordings_dir / f"weights_{label}.csv"
 
-        condition1 = (df.sender >= sender_min) & (df.sender <= sender_max)
-        condition2 = (df.targets >= target_min) & (df.targets <= target_max)
+        conns = nest.GetConnections(pop_pre, pop_post)
+        data = conns.get(["source", "target", "weight"])
 
-        df_sub = df[condition1 & condition2]
+        rename = {
+            "source": "sender",
+            "target": "receiver",
+        }
 
-        if label != "":
-            label = f"_{label}"
-        df_sub.to_csv(self.recordings_dir / f"{recorder_label}{label}.csv", index=False)
+        keys = list(data.keys())
+        out_keys = [rename.get(k, k) for k in keys]
+        n = len(next(iter(data.values()))) if keys else 0
 
-    def process_recordings(self, duration, nrns_in, nrns_rec, nrns_out):
-        recorder_labels = ["multimeter_out"]
-        if self.config["record_dynamics"]:
-            recorder_labels += ["spike_recorder_in", "weight_recorder"]
-            if "evidence" in self.file_name:
-                nrn_types = ["reg", "ad"]
-            else:
-                nrn_types = ["rec"]
-            for nrn_type in nrn_types:
-                recorder_labels.extend([f"multimeter_{nrn_type}", f"spike_recorder_{nrn_type}"])
+        with open(path, "w", newline="") as f:
+            w = csv.writer(f, lineterminator="\n")
+            w.writerow(out_keys)
+            for i in range(n):
+                w.writerow([data[k][i] for k in keys])
 
-        for recorder_label in recorder_labels:
-            file_names = sorted(self.recordings_dir.glob(f"{recorder_label}*.dat"))
+        del data, conns
 
-            dfs = []
+    def save_recordings(self, recorder_label, duration):
+        out_main = self.recordings_dir / f"{recorder_label}.csv"
+        out_sub = self.recordings_dir / f"{recorder_label}_subset.csv"
+        wrote_main = False
+        wrote_sub = False
 
-            df_file = self.recordings_dir / f"{recorder_label}.csv"
-            if df_file.is_file():
-                dfs.append(pd.read_csv(df_file, engine="c"))
+        t_margin = 50.0
+        seq = duration["sequence"]
+        task = duration["task"]
 
-            for fname in file_names:
-                df_new = pd.read_csv(fname, skiprows=2, sep="\t", engine="c")
-                if not df_new.empty:
-                    dfs.append(df_new)
-                    # fname.unlink()
+        rename = {
+            "senders": "sender",
+            "time_ms": "time",
+            "times": "time",
+            "weights": "weight",
+            "receptors": "receptor",
+            "ports": "port",
+            "targets": "receiver",
+        }
 
-            if not dfs:
-                df = df_new
-            elif len(dfs) == 1 or (len(dfs) == 2 and dfs[0].empty):
-                df = dfs[-1]
-            else:
-                df = pd.concat(dfs, ignore_index=True)
+        def flush_rows(path, rows, fieldnames, wrote_header_flag):
+            mode = "a" if wrote_header_flag else "w"
+            with open(path, mode, newline="") as f:
+                w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+                if not wrote_header_flag:
+                    w.writeheader()
+                w.writerows(rows)
 
-            if recorder_label == "weight_recorder":
-                self.save_weight_recordings(nrns_in + nrns_rec, nrns_rec + nrns_out, df, "", recorder_label)
-                self.save_weight_recordings(nrns_in, nrns_rec, df, "in", recorder_label)
-                self.save_weight_recordings(nrns_rec, nrns_rec, df, "rec", recorder_label)
-                self.save_weight_recordings(nrns_rec, nrns_out, df, "out", recorder_label)
+        for fname in sorted(self.recordings_dir.glob(f"*{recorder_label}*")):
+            if not (fname.name.endswith(".dat") or fname.name.endswith(".csv")):
+                continue
 
-            else:
-                df.to_csv(df_file, index=False)
+            with open(fname, newline="") as f:
+                if fname.name.endswith(".dat"):
+                    for _ in range(2):
+                        next(f, None)
+                    reader = csv.DictReader(f, delimiter="\t")
+                else:
+                    reader = csv.DictReader(f)
 
-                if "task" in duration.keys():
-                    t_margin = 50.0  # ms, record a bit into the next / previous iteration
+                in_fields = reader.fieldnames or []
+                out_fields = []
+                seen = set()
+                for k in in_fields:
+                    kk = rename.get(k, k)
+                    if kk not in seen:
+                        out_fields.append(kk)
+                        seen.add(kk)
 
-                    condition_first_iteration = df.time_ms < duration["sequence"] + t_margin
+                if not out_fields:
+                    fname.unlink()
+                    continue
 
-                    condition_last_iteration = df.time_ms >= duration["task"] - duration["sequence"] - t_margin
+                main_rows = []
+                sub_rows = []
 
-                    df_subset = df[condition_first_iteration | condition_last_iteration]
-                    df_subset.to_csv(self.recordings_dir / f"{recorder_label}_subset.csv", index=False)
+                for row in reader:
+                    out = {rename.get(k, k): v for k, v in row.items()}
 
-    def get_events(self, prefix, save=False):
-        dfs = []
-        for path in sorted(self.recordings_dir.glob(f"{prefix}*multimeter_out*.dat")):
-            df = pd.read_csv(path, sep="\t", comment="#", engine="c")
-            if not df.empty:
-                dfs.append(df)
-            path.unlink()
+                    t = out.get("time", "")
+                    try:
+                        t = float(t) if t != "" and t is not None else None
+                    except ValueError:
+                        t = None
 
-        if dfs:
-            events = pd.concat(dfs, ignore_index=True)
-            if save:
-                events.to_csv(self.recordings_dir / f"{prefix}_multimeter_out.csv", index=False)
-            return events
-        else:
-            return pd.DataFrame()
+                    main_rows.append(out)
+
+                    if t is not None:
+                        if (t < seq + t_margin) or (t >= task - seq - t_margin):
+                            sub_rows.append(out)
+
+            if main_rows:
+                flush_rows(out_main, main_rows, out_fields, wrote_main)
+                wrote_main = True
+
+            if sub_rows:
+                flush_rows(out_sub, sub_rows, out_fields, wrote_sub)
+                wrote_sub = True
+
+            del main_rows, sub_rows
+            fname.unlink()
+
+    def get_events(self, prefix="", save=False):
+        files = sorted(self.recordings_dir.glob(f"{prefix}*multimeter_out*.dat"))
+        if not files:
+            return np.empty(0, dtype=np.int64), np.empty(0, dtype=np.float64), np.empty(0, dtype=np.float64)
+
+        senders = []
+        readout = []
+        target = []
+
+        out_path = self.recordings_dir / f"{prefix}_multimeter_out.csv"
+        wrote_header = False
+
+        for fname in files:
+            with open(fname, newline="") as f:
+                reader = csv.DictReader((line for line in f if not line.startswith("#")), delimiter="\t")
+
+                if save:
+                    with open(out_path, "a", newline="") as fo:
+                        w = csv.DictWriter(fo, fieldnames=reader.fieldnames)
+                        if not wrote_header:
+                            w.writeheader()
+                            wrote_header = True
+                        for row in reader:
+                            senders.append(int(row["sender"]))
+                            readout.append(float(row["readout_signal"]))
+                            target.append(float(row["target_signal"]))
+                            w.writerow(row)
+                else:
+                    for row in reader:
+                        senders.append(int(row["sender"]))
+                        readout.append(float(row["readout_signal"]))
+                        target.append(float(row["target_signal"]))
+
+            fname.unlink()
+
+        return (
+            np.asarray(senders, dtype=np.int64),
+            np.asarray(readout, dtype=np.float64),
+            np.asarray(target, dtype=np.float64),
+        )
 
     def clear_events(self, prefix):
         for path in sorted(self.recordings_dir.glob(f"{prefix}*multimeter_out*.dat")):
             path.unlink()
 
-    def get_results(self):
-        return pd.read_csv(self.recordings_dir / "learning_performance.csv", engine="c")
+    def load_data(self, label):
+        return pd.read_csv(self.recordings_dir / f"{label}.csv", engine="c")
 
     def make_serializable(self, obj):
         if isinstance(obj, float) and (math.isinf(obj) or math.isnan(obj)):
@@ -238,7 +346,7 @@ class Tools:
         if isinstance(obj, tuple):
             return list(obj)
         if isinstance(obj, dict):
-            return {k: self.make_serializable(v) for k, v in obj.items()}
+            return dict((k, self.make_serializable(v)) for k, v in obj.items())
         if isinstance(obj, list):
             return [self.make_serializable(i) for i in obj]
         return obj
@@ -248,18 +356,21 @@ class Tools:
             json.dump(self.make_serializable(kernel_status), f, indent=4)
 
     def save_performance(self, iteration, loss, errors, phase_label):
-        with open(self.recordings_dir / "learning_performance.csv", "a") as f:
+        path = self.recordings_dir / "learning_performance.csv"
+        with open(path, "a", newline="") as f:
+            w = csv.writer(f, lineterminator="\n")
             for l, e in zip(loss, errors):
-                f.write(f"{iteration},{phase_label},{l},{e}\n")
+                w.writerow([iteration, phase_label, l, e])
+                iteration += 1
 
     def verify(self):
-        # print(self.file_name)
+        self.loss = self.load_data("learning_performance").loss.values
+        # print(self.cfg["file_name"])
         # for l in self.loss:
         #     print(f"{l:.14f},")
         # exit()
-        loss = np.array(self.loss)
 
-        if self.file_name == "eprop_supervised_classification_evidence-accumulation_bsshslm_2020.py":
+        if self.cfg["file_name"] == "eprop_supervised_classification_evidence-accumulation_bsshslm_2020.py":
             loss_reference = [
                 0.74115255000619,
                 0.74038818770074,
@@ -268,7 +379,7 @@ class Tools:
                 0.72942896284495,
                 0.65825443888416,
             ]
-        elif self.file_name == "eprop_supervised_classification_evidence-accumulation.py":
+        elif self.cfg["file_name"] == "eprop_supervised_classification_evidence-accumulation.py":
             loss_reference = [
                 34.58427289782617,
                 36.87835068653019,
@@ -277,7 +388,7 @@ class Tools:
                 36.76571948680768,
                 29.90618754038629,
             ]
-        elif self.file_name == "eprop_supervised_regression_sine-waves_bsshslm_2020.py":
+        elif self.cfg["file_name"] == "eprop_supervised_regression_sine-waves_bsshslm_2020.py":
             loss_reference = [
                 101.96435699904158,
                 103.46673112620579,
@@ -285,7 +396,7 @@ class Tools:
                 103.68024403768638,
                 104.41277574875247,
             ]
-        elif self.file_name == "eprop_supervised_regression_sine-waves.py":
+        elif self.cfg["file_name"] == "eprop_supervised_regression_sine-waves.py":
             loss_reference = [
                 107.73732072362752,
                 106.42253313316886,
@@ -293,7 +404,7 @@ class Tools:
                 108.10839027499375,
                 107.76400611943626,
             ]
-        elif self.file_name == "eprop_supervised_classification_neuromorphic_mnist.py":
+        elif self.cfg["file_name"] == "eprop_supervised_classification_neuromorphic_mnist.py":
             loss_reference = [
                 0.49569090581695,
                 0.52751321436889,
@@ -302,16 +413,29 @@ class Tools:
                 0.50532549825770,
                 0.49938869752847,
             ]
-        elif self.file_name == "eprop_supervised_classification_neuromorphic_mnist_bsshslm_2020.py":
+        elif self.cfg["file_name"] == "eprop_supervised_classification_neuromorphic_mnist_bsshslm_2020.py":
             loss_reference = [
-                2.29926915739071,
-                2.30735389920452,
-                2.31229167547814,
-                2.30398946726470,
-                2.30571008112245,
-                2.30277356036807,
+                # 2.29926915739071,
+                # 2.30735389920452,
+                # 2.31229167547814,
+                # 2.30398946726470,
+                # 2.30571008112245,
+                # 2.30277356036807,
+                2.30255632439916,
+                2.30276714829263,
+                2.30273512725323,
+                2.29159414308686,
+                2.13508458817967,
+                2.85064803699591,
+                1.96775491423905,
+                2.25084317619386,
+                2.15793814437091,
+                2.68245474754681,
+                2.61180476107622,
+                2.91421839715668,
+                2.25871717728110,
             ]
-        elif self.file_name == "eprop_supervised_regression_lemniscate_bsshslm_2020.py":
+        elif self.cfg["file_name"] == "eprop_supervised_regression_lemniscate_bsshslm_2020.py":
             loss_reference = [
                 314.30442538643001,
                 313.84127193622919,
@@ -319,7 +443,7 @@ class Tools:
                 310.66410755892281,
                 309.19353500432857,
             ]
-        elif self.file_name == "eprop_supervised_regression_handwriting_bsshslm_2020.py":
+        elif self.cfg["file_name"] == "eprop_supervised_regression_handwriting_bsshslm_2020.py":
             loss_reference = [
                 91.40191610510351,
                 90.53583357361666,
@@ -328,14 +452,14 @@ class Tools:
                 86.98770239575573,
             ]
 
-        n_compare = min(len(loss), len(loss_reference))
-        verification_successful = np.allclose(loss[:n_compare], loss_reference[:n_compare], atol=1e-14, rtol=0)
+        n_compare = min(len(self.loss), len(loss_reference))
+        verification_successful = np.allclose(self.loss[:n_compare], loss_reference[:n_compare], atol=1e-14, rtol=0)
 
         if not verification_successful:
-            deviation_idc = np.where(loss[:n_compare] != loss_reference[:n_compare])[0]
+            deviation_idc = np.where(self.loss[:n_compare] != loss_reference[:n_compare])[0]
             for deviation_idx in deviation_idc:
                 print(f"{deviation_idx}. iteration")
-                print(f"{loss[deviation_idx]:.16f} loss")
+                print(f"{self.loss[deviation_idx]:.16f} loss")
                 print(f"{loss_reference[deviation_idx]:.16f} reference loss")
-                print(f"{loss[deviation_idx]-loss_reference[deviation_idx]:.16f} delta")
+                print(f"{self.loss[deviation_idx]-loss_reference[deviation_idx]:.16f} delta")
         print(verification_successful)

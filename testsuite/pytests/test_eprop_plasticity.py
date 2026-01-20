@@ -214,7 +214,7 @@ def test_eprop_regression(neuron_model, optimizer, loss_nest_reference):
         params_nrn_rec["adaptation"] = 0.0
 
     gen_spk_in = nest.Create("spike_generator", n_in)
-    nrns_in = nest.Create("parrot_neuron", n_in)
+    nrns_inp = nest.Create("parrot_neuron", n_in)
     nrns_rec = nest.Create(neuron_model, n_rec, params_nrn_rec)
     nrns_out = nest.Create("eprop_readout", n_out, params_nrn_out)
     gen_rate_target = nest.Create("step_rate_generator", n_out)
@@ -240,7 +240,7 @@ def test_eprop_regression(neuron_model, optimizer, loss_nest_reference):
     }
 
     params_wr = {
-        "senders": nrns_in[:n_record_w] + nrns_rec[:n_record_w],
+        "senders": nrns_inp[:n_record_w] + nrns_rec[:n_record_w],
         "targets": nrns_rec[:n_record_w] + nrns_out,
         "start": duration["total_offset"],
         "stop": duration["total_offset"] + duration["task"],
@@ -333,15 +333,15 @@ def test_eprop_regression(neuron_model, optimizer, loss_nest_reference):
 
     nest.SetDefaults("eprop_synapse", params_common_syn_eprop)
 
-    nest.Connect(gen_spk_in, nrns_in, params_conn_one_to_one, params_syn_static)
-    nest.Connect(nrns_in, nrns_rec, params_conn_all_to_all, params_syn_in)
+    nest.Connect(gen_spk_in, nrns_inp, params_conn_one_to_one, params_syn_static)
+    nest.Connect(nrns_inp, nrns_rec, params_conn_all_to_all, params_syn_in)
     nest.Connect(nrns_rec, nrns_rec, params_conn_all_to_all, params_syn_rec)
     nest.Connect(nrns_rec, nrns_out, params_conn_all_to_all, params_syn_out)
     nest.Connect(nrns_out, nrns_rec, params_conn_all_to_all, params_syn_feedback)
     nest.Connect(gen_rate_target, nrns_out, params_conn_one_to_one, params_syn_rate_target)
     nest.Connect(gen_learning_window, nrns_out, params_conn_all_to_all, params_syn_learning_window)
 
-    nest.Connect(nrns_in + nrns_rec, sr, params_conn_all_to_all, params_syn_static)
+    nest.Connect(nrns_inp + nrns_rec, sr, params_conn_all_to_all, params_syn_static)
 
     nest.Connect(mm_rec, nrns_rec_record, params_conn_all_to_all, params_syn_static)
     nest.Connect(mm_out, nrns_out, params_conn_all_to_all, params_syn_static)
@@ -523,7 +523,7 @@ def test_eprop_surrogate_gradients(surrogate_gradient_type, surrogate_gradient_r
     }
 
     gen_spk_in = nest.Create("spike_generator", 1)
-    nrns_in = nest.Create("parrot_neuron", 1)
+    nrns_inp = nest.Create("parrot_neuron", 1)
     nrns_rec = nest.Create("eprop_iaf", 1, params_nrn_rec)
 
     params_mm_rec = {
@@ -546,8 +546,8 @@ def test_eprop_surrogate_gradients(surrogate_gradient_type, surrogate_gradient_r
 
     nest.SetStatus(gen_spk_in, {"spike_times": [1.0, 2.0, 3.0, 5.0, 9.0, 11.0]})
 
-    nest.Connect(gen_spk_in, nrns_in, params_conn_one_to_one, params_syn_static)
-    nest.Connect(nrns_in, nrns_rec, params_conn_one_to_one, params_syn)
+    nest.Connect(gen_spk_in, nrns_inp, params_conn_one_to_one, params_syn_static)
+    nest.Connect(nrns_inp, nrns_rec, params_conn_one_to_one, params_syn)
     nest.Connect(mm_rec, nrns_rec, params_conn_one_to_one, params_syn_static)
 
     nest.Simulate(duration["sim"])
