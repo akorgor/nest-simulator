@@ -102,12 +102,12 @@ class SpikeData
 protected:
   static constexpr int MAX_LAG = generate_max_value( NUM_BITS_LAG );
 
-  size_t lcid_ : NUM_BITS_LCID;                               //!< local connection index
-  unsigned int marker_ : NUM_BITS_MARKER_SPIKE_DATA;          //!< status flag
-  unsigned int activation_event_ : NUM_BITS_ACTIVATION_EVENT; //!< activation flag
-  unsigned int lag_ : NUM_BITS_LAG;                           //!< lag in this min-delay interval
-  unsigned int tid_ : NUM_BITS_TID;                           //!< thread index
-  synindex syn_id_ : NUM_BITS_SYN_ID;                         //!< synapse-type index
+  size_t lcid_ : NUM_BITS_LCID;                         //!< local connection index
+  size_t marker_ : NUM_BITS_MARKER_SPIKE_DATA;          //!< status flag
+  size_t lag_ : NUM_BITS_LAG;                           //!< lag in this min-delay interval
+  size_t tid_ : NUM_BITS_TID;                           //!< thread index
+  synindex syn_id_ : NUM_BITS_SYN_ID;                   //!< synapse-type index
+  size_t activation_event_ : NUM_BITS_ACTIVATION_EVENT; //!< activation flag
 
 public:
   SpikeData();
@@ -217,30 +217,30 @@ using success_spike_data_size = StaticAssert< sizeof( SpikeData ) == 8 >::succes
 inline SpikeData::SpikeData()
   : lcid_( 0 )
   , marker_( SPIKE_DATA_ID_DEFAULT )
-  , activation_event_( NOT_ACTIVATION_EVENT )
   , lag_( 0 )
   , tid_( 0 )
   , syn_id_( 0 )
+  , activation_event_( NOT_ACTIVATION_EVENT )
 {
 }
 
 inline SpikeData::SpikeData( const SpikeData& rhs )
   : lcid_( rhs.lcid_ )
   , marker_( rhs.marker_ )
-  , activation_event_( rhs.activation_event_ )
   , lag_( rhs.lag_ )
   , tid_( rhs.tid_ )
   , syn_id_( rhs.syn_id_ )
+  , activation_event_( rhs.activation_event_ )
 {
 }
 
 inline SpikeData::SpikeData( const Target& target, const size_t lag, const bool activation )
   : lcid_( target.get_lcid() )
   , marker_( SPIKE_DATA_ID_DEFAULT )
-  , activation_event_( NOT_ACTIVATION_EVENT )
   , lag_( lag )
   , tid_( target.get_tid() )
   , syn_id_( target.get_syn_id() )
+  , activation_event_( NOT_ACTIVATION_EVENT )
 {
   if ( activation )
   {
@@ -251,10 +251,10 @@ inline SpikeData::SpikeData( const Target& target, const size_t lag, const bool 
 inline SpikeData::SpikeData( const size_t tid, const synindex syn_id, const size_t lcid, const unsigned int lag )
   : lcid_( lcid )
   , marker_( SPIKE_DATA_ID_DEFAULT )
-  , activation_event_( NOT_ACTIVATION_EVENT )
   , lag_( lag )
   , tid_( tid )
   , syn_id_( syn_id )
+  , activation_event_( NOT_ACTIVATION_EVENT )
 {
 }
 
@@ -263,10 +263,10 @@ SpikeData::operator=( const SpikeData& rhs )
 {
   lcid_ = rhs.lcid_;
   marker_ = rhs.marker_;
-  activation_event_ = rhs.activation_event_;
   lag_ = rhs.lag_;
   tid_ = rhs.tid_;
   syn_id_ = rhs.syn_id_;
+  activation_event_ = rhs.activation_event_;
   return *this;
 }
 
@@ -280,10 +280,10 @@ SpikeData::set( const size_t tid, const synindex syn_id, const size_t lcid, cons
 
   lcid_ = lcid;
   marker_ = SPIKE_DATA_ID_DEFAULT;
-  activation_event_ = NOT_ACTIVATION_EVENT;
   lag_ = lag;
   tid_ = tid;
   syn_id_ = syn_id;
+  activation_event_ = NOT_ACTIVATION_EVENT;
 }
 
 
@@ -295,10 +295,10 @@ SpikeData::set( const TargetT& target, const unsigned int lag )
   assert( lag < MAX_LAG );
   lcid_ = target.get_lcid();
   marker_ = SPIKE_DATA_ID_DEFAULT;
-  activation_event_ = NOT_ACTIVATION_EVENT;
   lag_ = lag;
   tid_ = target.get_tid();
   syn_id_ = target.get_syn_id();
+  activation_event_ = NOT_ACTIVATION_EVENT;
 }
 
 inline size_t
@@ -498,10 +498,10 @@ OffGridSpikeData::set( const size_t tid,
 
   lcid_ = lcid;
   marker_ = SPIKE_DATA_ID_DEFAULT;
-  activation_event_ = NOT_ACTIVATION_EVENT;
   lag_ = lag;
   tid_ = tid;
   syn_id_ = syn_id;
+  activation_event_ = NOT_ACTIVATION_EVENT;
   offset_ = offset;
 }
 
