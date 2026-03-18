@@ -14,8 +14,8 @@ if nest.Rank() == 0:
 with open(script_dir / "config.json", "r") as f:
     cfg = json.load(f)
 
-local_num_threads = cfg["cpus_per_task"]
-total_num_virtual_procs = cfg["nodes"] * cfg["ntasks_per_node"] * local_num_threads
+local_num_threads = cfg["job_cpus_per_task"]
+total_num_virtual_procs = cfg["job_nodes"] * cfg["job_ntasks_per_node"] * local_num_threads
 
 n_rec = int(cfg["n_rec_base"] * cfg["scale"])
 n_in = int(cfg["n_in_base"] * cfg["scale"])
@@ -94,10 +94,10 @@ if n_in > 0:
     )
 
 if "eprop" in cfg["plasticity"]:
-    nest.SetStatus(nrns_rec, dict(ignore_and_fire=True, phase=nest.random.uniform(0.0, 1.0), rate=cfg["rate_rec"]))
+    nrns_rec.set(dict(ignore_and_fire=True, phase=nest.random.uniform(0.0, 1.0), rate=cfg["rate_rec"]))
 
 if model_nrn_out == "iaf_psc_delta":
-    nest.SetStatus(nrns_out, dict(V_th=1e100))
+    nrns_out.set(dict(V_th=1e100))
 
 nest.Connect(
     nrns_rec, nrns_rec, dict(rule="fixed_indegree", indegree=cfg["indegree_rec"]), dict(synapse_model=model_syn_rec)
@@ -132,9 +132,9 @@ if nest.Rank() == 0:
         n_spikes=kernel_status["local_spike_counter"],
         time_sim=kernel_status["time_simulate"],
         time_bio=kernel_status["biological_time"],
-        cpus_per_task=cfg["cpus_per_task"],
-        nodes=cfg["nodes"],
-        ntasks_per_node=cfg["ntasks_per_node"],
+        job_cpus_per_task=cfg["job_cpus_per_task"],
+        job_nodes=cfg["job_nodes"],
+        job_ntasks_per_node=cfg["job_ntasks_per_node"],
         plasticity=cfg["plasticity"],
     )
 

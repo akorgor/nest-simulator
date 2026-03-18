@@ -2,59 +2,27 @@ import csv
 import json
 import math
 import shutil
-from collections import OrderedDict as odict
 from collections.abc import Mapping
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import nest
 import numpy as np
 import pandas as pd
-from cycler import cycler
 
 
 class Tools:
     def __init__(self, cfg, file_path):
-        cfg["file_name"] = Path(file_path).name
+        self.file_path = Path(file_path)
+        self.file_parent_path = self.file_path.resolve().parent
+        self.file_stem = self.file_path.stem
+        cfg["file_name"] = self.file_path.name
+
         self.cfg = cfg
         self.load_cfg()
-        np.random.seed(self.cfg["seed"])
         self.init_results_dir()
         self.save_cfg()
-        self.init_plotting()
-
-    def init_plotting(self):
-        self.colors = odict(
-            blue="#2854c5",
-            red="#e04b40",
-            green="#25aa2c",
-            gold="#f9c643",
-            gray="#696969",
-            orange="#f8933d",
-            black="#000000",
-            purple="#6f1970",
-            lightorange="#fab377",
-            lightred="#e98179",
-            lightgreen="#66c36b",
-            lightgray="#d3d3d3",
-            lightblue="#b8dcfd",
-            lightyellow="#fcdd91",
-            mediumgray="#b8b8b8",
-            pink="#fe5895",
-            yellow="#f9f871",
-        )
-
-        plt.rcParams.update(
-            dict(
-                [
-                    ("axes.spines.right", False),
-                    ("axes.spines.top", False),
-                    ("axes.prop_cycle", cycler(color=list(self.colors.values()))),
-                    ("figure.dpi", 300),
-                    ("font.family", "DejaVu Sans"),
-                ]
-            )
-        )
+        self.loss = []
+        self.data_file_list = []
 
     def init_results_dir(self):
         self.results_dir = Path(self.cfg["results_dir"])
@@ -65,14 +33,6 @@ class Tools:
         self.recordings_dir = self.results_dir / "recordings"
         self.recordings_dir.mkdir(parents=True, exist_ok=True)
         self.cfg["recordings_dir"] = str(self.recordings_dir.resolve())
-
-        if self.cfg["do_plotting"]:
-            self.figures_dir = self.results_dir / "figures"
-            self.figures_dir.mkdir(parents=True, exist_ok=True)
-            self.cfg["figures_dir"] = str(self.figures_dir.resolve())
-
-        with open(self.recordings_dir / "learning_performance.csv", "w") as f:
-            f.write("iteration,phase,loss,error\n")
 
     def deep_update(self, orig, new):
         for key, val in new.items():
@@ -91,81 +51,106 @@ class Tools:
         with open(self.recordings_dir / "config_derived.json", "w") as file:
             json.dump(self.cfg, file, indent=4)
 
-    def constrain_weights(self, nrns, params_syn_base, params_common_syn_eprop):
-        nrns_inp, nrns_rec, nrns_out = nrns
-        weight_dicts = [
-            dict(
-                nrns_pre=nrns_inp,
-                nrns_post=nrns_rec,
-                constrain_sign=self.cfg["constrain_weights_sign_in"],
-                constrain_dale=self.cfg["constrain_weights_dale_in"],
-            ),
-            dict(
-                nrns_pre=nrns_rec,
-                nrns_post=nrns_rec,
-                constrain_sign=self.cfg["constrain_weights_sign_rec"],
-                constrain_dale=self.cfg["constrain_weights_dale_rec"],
-            ),
-            dict(
-                nrns_pre=nrns_rec,
-                nrns_post=nrns_out,
-                constrain_sign=self.cfg["constrain_weights_sign_out"],
-                constrain_dale=self.cfg["constrain_weights_dale_out"],
-            ),
-        ]
+    def sample_recordable_connections(self, nrns_inp, nrns_rec, nrns_out, n_record_w):
+        senders_list = []
+        receivers_list = []
 
-        pop_pre_arr = np.array([], dtype=int)
-        pop_post_arr = np.array([], dtype=int)
-        weights_arr = np.array([])
+        rng = np.random.default_rng(self.cfg["seed"])
+        for pop_pre, pop_post in (
+            (nrns_inp, nrns_rec),
+            (nrns_rec, nrns_rec),
+            (nrns_rec, nrns_out),
+        ):
+            conns = nest.GetConnections(pop_pre, pop_post)
+            senders = np.asarray(conns.source)
+            receivers = np.asarray(conns.target)
 
-        for weight_dict in weight_dicts:
-            if weight_dict["constrain_sign"] or weight_dict["constrain_dale"]:
-                conns = nest.GetConnections(weight_dict["nrns_pre"], weight_dict["nrns_post"])
-                conns_dict = conns.get()
-                conns_dict["source"] = np.array(conns_dict["source"], dtype=int)
-                conns_dict["target"] = np.array(conns_dict["target"], dtype=int)
-                conns_dict["weight"] = np.array(conns_dict["weight"])
+            n_conn = len(senders)
+            if n_conn == 0:
+                continue
 
-                if weight_dict["constrain_dale"]:
-                    source_unique = np.unique(conns_dict["source"])
-                    proportion_inh = 1.0 / (1.0 + self.cfg["exc_to_inh_ratio"])
-                    sources_inh = np.random.choice(
-                        source_unique, int(len(source_unique) * proportion_inh), replace=False
-                    )
-                    new_weights = []
-                    for source, weight in zip(conns_dict["source"], np.abs(conns_dict["weight"])):
-                        if source in sources_inh:
-                            weight *= -1.0
-                        new_weights.append(weight)
-                    conns_dict["weight"] = np.array(new_weights)
+            idc = rng.choice(n_conn, size=min(n_record_w, n_conn), replace=False)
+            senders_list.append(senders[idc])
+            receivers_list.append(receivers[idc])
 
-                nest.Disconnect(conns)
+        return np.unique(np.concatenate(senders_list)), np.unique(np.concatenate(receivers_list))
 
-                weights_arr = np.append(weights_arr, conns_dict["weight"])
-                pop_pre_arr = np.append(pop_pre_arr, conns_dict["source"])
-                pop_post_arr = np.append(pop_post_arr, conns_dict["target"])
+    def configure_weight_recorder_connections(self, wr, nrns_inp, nrns_rec, nrns_out, n_record_w):
+        senders, receivers = self.sample_recordable_connections(nrns_inp, nrns_rec, nrns_out, n_record_w)
+        if len(senders) > 0:
+            wr.set(senders=senders, targets=receivers)
 
-        for sign_dict in [dict(Wmin=0.0, Wmax=100.0), dict(Wmin=-100.0, Wmax=0.0)]:
-            sign = np.sign(sign_dict["Wmin"])
-            label = "positive" if sign >= 0.0 else "negative"
+    def constrain_weights(self, pop_sender, pop_receiver, syn_spec, label):
 
-            params_common = params_common_syn_eprop.copy()
-            params_common["optimizer"].update(sign_dict)
-            params_common["weight"] = sign_dict["Wmin"]
+        weight_sign_fixed = self.cfg[f"weight_sign_fixed_{label}"]
+        weight_dale_enforced = self.cfg[f"weight_dale_enforced_{label}"]
+        if not (weight_sign_fixed or weight_dale_enforced):
+            return
 
-            base_synapse_model = params_syn_base["synapse_model"]
-            synapse_model = f"{base_synapse_model}_{label}"
-            nest.CopyModel(base_synapse_model, synapse_model, params_common)
+        conns = nest.GetConnections(pop_sender, pop_receiver)
+        if len(conns) == 0:
+            return
+        senders_arr = np.asarray(conns.source)
+        receivers_arr = np.asarray(conns.target)
+        weights_arr = np.asarray(conns.weight, dtype=float)
+        delays_arr = np.asarray(conns.delay, dtype=float)
+        synapse_models = np.unique(conns.synapse_model)
 
-            if len(weights_arr) > 0:
-                idc = np.where(weights_arr >= 0.0 if sign >= 0.0 else weights_arr < 0.0)
+        if len(synapse_models) != 1:
+            raise ValueError(f"Expected exactly one synapse model, got {list(synapse_models)}")
+        base_synapse_model = synapse_models[0]
+        existing_synapse_models = set(nest.GetKernelStatus()["synapse_models"])
 
-                params_base = params_syn_base.copy()
-                params_base["synapse_model"] = synapse_model
-                params_base["weight"] = weights_arr[idc]
-                params_base["delay"] = np.ones_like(params_base["weight"]) * params_syn_base["delay"]
+        if weight_dale_enforced:
+            proportion_inh = 1.0 / (1.0 + self.cfg["exc_to_inh_ratio"])
+            senders_unique = np.unique(senders_arr)
 
-                nest.Connect(pop_pre_arr[idc], pop_post_arr[idc], conn_spec="one_to_one", syn_spec=params_base)
+            n_senders_inh = round(len(senders_unique) * proportion_inh)
+
+            # Better: store this once on self and reuse it.
+            rng = np.random.default_rng(self.cfg["seed"])
+            senders_inh = set(rng.choice(senders_unique, n_senders_inh, replace=False))
+
+            is_inh = np.isin(senders_arr, list(senders_inh))
+            weights_arr = np.where(is_inh, -np.abs(weights_arr), np.abs(weights_arr))
+
+            exc_mask = weights_arr >= 0.0
+            inh_mask = ~exc_mask
+
+            for mask, suffix, sign_params in (
+                (
+                    exc_mask,
+                    "exc",
+                    {"weight": 0.0, "optimizer": {"Wmin": 0.0, "Wmax": 100.0}},
+                ),
+                (
+                    inh_mask,
+                    "inh",
+                    {"weight": -100.0, "optimizer": {"Wmin": -100.0, "Wmax": 0.0}},
+                ),
+            ):
+                if not np.any(mask):
+                    continue
+
+                synapse_model = f"{base_synapse_model}_{suffix}"
+
+                if synapse_model not in existing_synapse_models:
+                    nest.CopyModel(base_synapse_model, synapse_model, sign_params)
+                    existing_synapse_models.add(synapse_model)
+
+                nest.Connect(
+                    senders_arr[mask],
+                    receivers_arr[mask],
+                    "one_to_one",
+                    {
+                        **syn_spec,
+                        "synapse_model": synapse_model,
+                        "weight": weights_arr[mask],
+                        "delay": delays_arr[mask],
+                    },
+                )
+
+            nest.Disconnect(conns)
 
     def set_synapse_defaults(self, eta):
         for synapse_model in nest.synapse_models:
@@ -173,20 +158,24 @@ class Tools:
                 nest.SetDefaults(synapse_model, dict(optimizer=dict(eta=eta)))
 
     def save_node_ids(self, pop_dict):
-        path = self.recordings_dir / "node_ids.csv"
+        fname = "node_ids"
+        path = self.recordings_dir / f"{fname}.csv"
+        self.data_file_list.append(fname)
         with open(path, "w", newline="") as f:
             w = csv.writer(f, lineterminator="\n")
             w.writerow(["id", "label"])
             for label, v in pop_dict.items():
                 nrn_ids = v.get("global_id")
-                if isinstance(nrn_ids, int):
+                if isinstance(nrn_ids, int) or isinstance(nrn_ids, np.int64):
                     w.writerow([nrn_ids, label])
                 else:
                     for nid in nrn_ids:
                         w.writerow([nid, label])
 
     def save_weights(self, pop_pre, pop_post, label):
-        path = self.recordings_dir / f"weights_{label}.csv"
+        fname = f"weights_{label}"
+        path = self.recordings_dir / f"{fname}.csv"
+        self.data_file_list.append(fname)
 
         conns = nest.GetConnections(pop_pre, pop_post)
         data = conns.get(["source", "target", "weight"])
@@ -210,7 +199,10 @@ class Tools:
 
     def save_recordings(self, recorder_label, duration):
         out_main = self.recordings_dir / f"{recorder_label}.csv"
-        out_sub = self.recordings_dir / f"{recorder_label}_subset.csv"
+        fname = f"{recorder_label}_subset"
+        out_sub = self.recordings_dir / f"{fname}.csv"
+        self.data_file_list.append(fname)
+
         wrote_main = False
         wrote_sub = False
 
@@ -293,50 +285,53 @@ class Tools:
     def get_events(self, prefix="", save=False):
         files = sorted(self.recordings_dir.glob(f"{prefix}*multimeter_out*.dat"))
         if not files:
-            return np.empty(0, dtype=np.int64), np.empty(0, dtype=np.float64), np.empty(0, dtype=np.float64)
+            empty_i = np.empty(0, dtype=np.int64)
+            empty_f = np.empty(0, dtype=np.float64)
+            return empty_i, empty_f, empty_f
 
-        senders = []
-        readout = []
-        target = []
-
+        senders, times, readout_signals, target_signals = [], [], [], []
         out_path = self.recordings_dir / f"{prefix}_multimeter_out.csv"
-        wrote_header = False
+
+        if save and out_path.exists():
+            out_path.unlink()
 
         for fname in files:
             with open(fname, newline="") as f:
-                reader = csv.DictReader((line for line in f if not line.startswith("#")), delimiter="\t")
+                reader = csv.DictReader(
+                    (line for line in f if not line.startswith("#")),
+                    delimiter="\t",
+                )
+
+                writer = None
+                if save:
+                    fo = open(out_path, "a", newline="")
+                    writer = csv.DictWriter(fo, fieldnames=reader.fieldnames)
+                    if fo.tell() == 0:
+                        writer.writeheader()
+
+                for row in reader:
+                    senders.append(row["sender"])
+                    times.append(row["time_ms"])
+                    readout_signals.append(row["readout_signal"])
+                    target_signals.append(row["target_signal"])
+                    if writer:
+                        writer.writerow(row)
 
                 if save:
-                    with open(out_path, "a", newline="") as fo:
-                        w = csv.DictWriter(fo, fieldnames=reader.fieldnames)
-                        if not wrote_header:
-                            w.writeheader()
-                            wrote_header = True
-                        for row in reader:
-                            senders.append(int(row["sender"]))
-                            readout.append(float(row["readout_signal"]))
-                            target.append(float(row["target_signal"]))
-                            w.writerow(row)
-                else:
-                    for row in reader:
-                        senders.append(int(row["sender"]))
-                        readout.append(float(row["readout_signal"]))
-                        target.append(float(row["target_signal"]))
+                    fo.close()
+                    fname.unlink()
 
-            fname.unlink()
+        senders = np.asarray(senders, dtype=np.int64)
+        times = np.asarray(times, dtype=np.float64)
+        readout_signals = np.asarray(readout_signals, dtype=np.float64)
+        target_signals = np.asarray(target_signals, dtype=np.float64)
 
-        return (
-            np.asarray(senders, dtype=np.int64),
-            np.asarray(readout, dtype=np.float64),
-            np.asarray(target, dtype=np.float64),
-        )
+        order = np.lexsort((times, senders))
+        return senders[order], readout_signals[order], target_signals[order]
 
     def clear_events(self, prefix):
         for path in sorted(self.recordings_dir.glob(f"{prefix}*multimeter_out*.dat")):
             path.unlink()
-
-    def load_data(self, label):
-        return pd.read_csv(self.recordings_dir / f"{label}.csv", engine="c")
 
     def make_serializable(self, obj):
         if isinstance(obj, float) and (math.isinf(obj) or math.isnan(obj)):
@@ -355,111 +350,155 @@ class Tools:
         with open(self.recordings_dir / "kernel_status.json", "w") as f:
             json.dump(self.make_serializable(kernel_status), f, indent=4)
 
-    def save_performance(self, iteration, loss, errors, phase_label):
-        path = self.recordings_dir / "learning_performance.csv"
+    def save_performance(self, iteration, loss, errors=[], phase_label=""):
+        fname = "learning_performance"
+        path = self.recordings_dir / f"{fname}.csv"
+        self.data_file_list.append(fname)
+
+        do_append_errors = len(errors) > 0
+
+        if not path.exists():
+            df = pd.DataFrame(columns=["iteration", "phase", "loss"])
+            if do_append_errors:
+                df["error"] = []
+            df.to_csv(path, index=False)
+
         with open(path, "a", newline="") as f:
             w = csv.writer(f, lineterminator="\n")
-            for l, e in zip(loss, errors):
-                w.writerow([iteration, phase_label, l, e])
+            for i in range(len(loss)):
+                row = [iteration]
+                if phase_label != "":
+                    row.append(phase_label)
+                row.append(loss[i])
+                if do_append_errors:
+                    row.append(errors[i])
+                w.writerow(row)
                 iteration += 1
 
     def verify(self):
-        self.loss = self.load_data("learning_performance").loss.values
+        self.loss = self.load_data("learning_performance").loss.to_numpy()
+
+        # from datetime import datetime
+        # from pathlib import Path
+        # fname = (Path.home() / "log" / datetime.now().strftime("%Y-%m-%d_%u_%H-%M-%S")).with_suffix(".txt")
+        # with open(fname, "w") as f:
+        #     f.write(self.cfg["file_name"] + "\n\n")
+        #     for l in self.loss:
+        #         f.write(f"{l:.13f}\n")
+        # exit()
+
         # print(self.cfg["file_name"])
         # for l in self.loss:
         #     print(f"{l:.14f},")
         # exit()
 
-        if self.cfg["file_name"] == "eprop_supervised_classification_evidence-accumulation_bsshslm_2020.py":
-            loss_reference = [
-                0.74115255000619,
-                0.74038818770074,
-                0.66578523317777,
-                0.66364419332299,
-                0.72942896284495,
-                0.65825443888416,
-            ]
-        elif self.cfg["file_name"] == "eprop_supervised_classification_evidence-accumulation.py":
-            loss_reference = [
+        loss_map = {
+            "eprop_supervised_classification_evidence-accumulation.py": [
                 34.58427289782617,
                 36.87835068653019,
                 28.89970643558962,
-                31.60581680525203,
+                31.60581680525202,
                 36.76571948680768,
                 29.90618754038629,
-            ]
-        elif self.cfg["file_name"] == "eprop_supervised_regression_sine-waves_bsshslm_2020.py":
-            loss_reference = [
-                101.96435699904158,
-                103.46673112620579,
-                103.34060707477168,
-                103.68024403768638,
-                104.41277574875247,
-            ]
-        elif self.cfg["file_name"] == "eprop_supervised_regression_sine-waves.py":
-            loss_reference = [
-                107.73732072362752,
-                106.42253313316886,
-                107.37869441301808,
-                108.10839027499375,
-                107.76400611943626,
-            ]
-        elif self.cfg["file_name"] == "eprop_supervised_classification_neuromorphic_mnist.py":
-            loss_reference = [
-                0.49569090581695,
-                0.52751321436889,
-                0.51467659566501,
-                0.50595422166446,
-                0.50532549825770,
-                0.49938869752847,
-            ]
-        elif self.cfg["file_name"] == "eprop_supervised_classification_neuromorphic_mnist_bsshslm_2020.py":
-            loss_reference = [
-                # 2.29926915739071,
-                # 2.30735389920452,
-                # 2.31229167547814,
-                # 2.30398946726470,
-                # 2.30571008112245,
-                # 2.30277356036807,
-                2.30255632439916,
-                2.30276714829263,
-                2.30273512725323,
-                2.29159414308686,
-                2.13508458817967,
-                2.85064803699591,
-                1.96775491423905,
-                2.25084317619386,
-                2.15793814437091,
-                2.68245474754681,
-                2.61180476107622,
-                2.91421839715668,
-                2.25871717728110,
-            ]
-        elif self.cfg["file_name"] == "eprop_supervised_regression_lemniscate_bsshslm_2020.py":
-            loss_reference = [
+            ],
+            "eprop_supervised_classification_evidence-accumulation_bsshslm_2020.py": [
+                0.70216337067153,
+                0.73555530315184,
+                0.74035486411103,
+                0.68388281528182,
+                0.70784112226789,
+                0.67269494515383,
+            ],
+            "eprop_supervised_classification_neuromorphic_mnist.py": [
+                10.35322836401918,
+                8.33506530601532,
+                9.72408176470581,
+                9.25152573790276,
+                4.67788466496715,
+                31.78819420209928,
+            ],
+            "eprop_supervised_classification_neuromorphic_mnist_bsshslm_2020.py": [
+                2.30246587138697,
+                2.28945027983528,
+                2.15313277459524,
+                2.78232640765524,
+                1.97565231669283,
+                2.24778735962639,
+            ],
+            "eprop_supervised_regression_handwriting.py": [
+                91.20706143549684,
+                91.24365648440904,
+                91.36386255798166,
+                91.15808668390740,
+                91.32144527401481,
+            ],
+            "eprop_supervised_regression_handwriting_bsshslm_2020.py": [
+                91.40191610510352,
+                90.53583357361666,
+                89.91415022333089,
+                88.54544175584948,
+                86.98770239575573,
+            ],
+            "eprop_supervised_regression_lemniscate.py": [
+                313.97823685007972,
+                314.44451082112619,
+                314.33470446080099,
+                314.34578846087288,
+                314.26966562042782,
+            ],
+            "eprop_supervised_regression_lemniscate_bsshslm_2020.py": [
                 314.30442538643001,
                 313.84127193622919,
                 312.33971633807948,
-                310.66410755892281,
+                310.66410755892286,
                 309.19353500432857,
-            ]
-        elif self.cfg["file_name"] == "eprop_supervised_regression_handwriting_bsshslm_2020.py":
-            loss_reference = [
-                91.40191610510351,
-                90.53583357361666,
-                89.91415022333089,
-                88.54544175584950,
-                86.98770239575573,
-            ]
+            ],
+            "eprop_supervised_regression_sine-waves.py": [
+                107.73732072362752,
+                106.42253313316886,
+                107.37869441301808,
+                108.10839027499374,
+                107.76400611943626,
+            ],
+            "eprop_supervised_regression_sine-waves_bsshslm_2020.py": [
+                101.96435699904158,
+                103.46673112620580,
+                103.34060707477168,
+                103.68024403768638,
+                104.41277574875248,
+            ],
+        }
+
+        loss_reference = np.array(loss_map.get(self.cfg["file_name"]))
+
+        if loss_reference is None:
+            print("\nFAILURE: No reference loss.\n")
+            return
 
         n_compare = min(len(self.loss), len(loss_reference))
-        verification_successful = np.allclose(self.loss[:n_compare], loss_reference[:n_compare], atol=1e-14, rtol=0)
+        verification_successful = np.allclose(self.loss[:n_compare], loss_reference[:n_compare], atol=1e-14, rtol=0.0)
 
         if not verification_successful:
             deviation_idc = np.where(self.loss[:n_compare] != loss_reference[:n_compare])[0]
+
             for deviation_idx in deviation_idc:
-                print(f"{deviation_idx}. iteration")
+                print(f"\n{deviation_idx}. iteration")
                 print(f"{self.loss[deviation_idx]:.16f} loss")
-                print(f"{loss_reference[deviation_idx]:.16f} reference loss")
-                print(f"{self.loss[deviation_idx]-loss_reference[deviation_idx]:.16f} delta")
-        print(verification_successful)
+                print(f"{loss_reference[deviation_idx]:.16f} loss reference")
+                print(f"{self.loss[deviation_idx]-loss_reference[deviation_idx]:.16f} difference")
+            print(f"\nFAILURE: The loss does not match the reference values.\n")
+        else:
+            print(f"\nSUCCESS: The loss matches the reference values.\n")
+
+    def read_data(self, fname):
+        data = pd.read_csv(self.recordings_dir / f"{fname}.csv", engine="c")
+        return data
+
+    def load_data(self, fname=""):
+        if fname == "":
+            data = dict()
+            for fname in self.data_file_list:
+                data[fname] = self.read_data(fname)
+        else:
+            data = self.read_data(fname)
+        return data
