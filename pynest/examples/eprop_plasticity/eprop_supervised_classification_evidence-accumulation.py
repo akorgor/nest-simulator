@@ -82,7 +82,6 @@ References
 
 import nest
 import numpy as np
-from IPython.display import Image
 from mpi4py import MPI
 from plotting import Plotter
 from toolbox import Tools
@@ -92,6 +91,7 @@ from toolbox import Tools
 # ~~~~~
 
 cfg = dict(
+    delete_existing_recordings=False,
     do_early_stopping=False,
     do_plotting=True,
     exc_to_inh_ratio=1.0,
@@ -102,8 +102,8 @@ cfg = dict(
     n_iter_train=5,
     n_iter_validate_every=10,
     record_dynamics=True,
-    remove_results_dir=False,
-    results_dir="./results",
+    relative_path_figures_dir="figures",
+    relative_path_recordings_dir="recordings",
     save_weights=True,
     seed=1,
     verify=True,
@@ -128,7 +128,7 @@ total_num_virtual_procs = cfg["job_nodes"] * cfg["job_ntasks_per_node"] * local_
 # the input and output of the classification task above, and lists of the required NEST device, neuron, and
 # synapse models below. The connections that must be established are numbered 1 to 7.
 
-Image(filename=tools.file_parent_path / f"{tools.file_stem}.png")
+tools.show_image()
 
 # %% ###########################################################################################################
 # Initialize random generator
@@ -196,7 +196,7 @@ duration.update(dict((key, value * duration["step"]) for key, value in steps.ite
 # objects and set some NEST kernel parameters.
 
 params_setup = dict(
-    data_path=str(tools.recordings_dir),  # path to save data to
+    data_path=str(tools.path_recordings_dir),  # path to save data to
     local_num_threads=local_num_threads,
     overwrite_files=False,  # if True, overwrite existing files
     print_time=False,  # if True, print time progress bar during simulation, set False if run as code cell
@@ -808,7 +808,8 @@ if cfg["save_weights"]:
 if cfg["do_plotting"]:
     data = tools.load_data()
     Plotter(
-        tools.results_dir,
+        __file__,
+        cfg["relative_path_figures_dir"],
         data,
         duration["task"],
         duration["sequence"],

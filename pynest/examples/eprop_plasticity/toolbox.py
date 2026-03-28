@@ -1,38 +1,47 @@
 import csv
 import json
 import math
-import shutil
 from collections.abc import Mapping
 from pathlib import Path
 
 import nest
 import numpy as np
 import pandas as pd
+from IPython.display import Image
 
 
 class Tools:
     def __init__(self, cfg, file_path):
         self.file_path = Path(file_path)
-        self.file_parent_path = self.file_path.resolve().parent
-        self.file_stem = self.file_path.stem
-        cfg["file_name"] = self.file_path.name
-
         self.cfg = cfg
         self.load_cfg()
-        self.init_results_dir()
+        self.initialize_save_dirs()
         self.save_cfg()
         self.loss = []
         self.data_file_list = []
 
-    def init_results_dir(self):
-        self.results_dir = Path(self.cfg["results_dir"])
+    def initialize_save_dirs(self):
+        self.path_recordings_dir = (self.file_path.parent / self.cfg["relative_path_recordings_dir"]).resolve()
+        if self.path_recordings_dir.is_dir():
+            if any(self.path_recordings_dir.iterdir()):
+                if self.cfg["delete_existing_recordings"]:
+                    for path in self.path_recordings_dir.iterdir():
+                        if path.is_file:
+                            path.unlink()
+                else:
+                    print(
+                        "\nWARNING: The recordings directory is not empty. This may cause the run to fail if overwriting is disabled or lead to incorrect results.\n"
+                    )
+        else:
+            self.path_recordings_dir.mkdir()
+        if "relative_path_data_dir" in self.cfg:
+            self.path_data_dir = (self.file_path.parent / self.cfg["relative_path_data_dir"]).resolve()
 
-        if self.cfg["remove_results_dir"] and self.results_dir.exists():
-            shutil.rmtree(self.results_dir)
-
-        self.recordings_dir = self.results_dir / "recordings"
-        self.recordings_dir.mkdir(parents=True, exist_ok=True)
-        self.cfg["recordings_dir"] = str(self.recordings_dir.resolve())
+    def show_image(self):
+        try:
+            Image(filename=self.file_path.with_suffix(".png"))
+        except:
+            pass
 
     def deep_update(self, orig, new):
         for key, val in new.items():
@@ -42,13 +51,13 @@ class Tools:
                 orig[key] = val
 
     def load_cfg(self):
-        cfg_path = Path(__file__).parent / "config.json"
+        cfg_path = self.file_path.parent / "config.json"
         if cfg_path.exists():
             with open(cfg_path) as f:
                 self.deep_update(self.cfg, json.load(f))
 
     def save_cfg(self):
-        with open(self.recordings_dir / "config_derived.json", "w") as file:
+        with open(self.path_recordings_dir / "config_derived.json", "w") as file:
             json.dump(self.cfg, file, indent=4)
 
     def sample_recordable_connections(self, nrns_inp, nrns_rec, nrns_out, n_record_w):
@@ -159,7 +168,7 @@ class Tools:
 
     def save_node_ids(self, pop_dict):
         fname = "node_ids"
-        path = self.recordings_dir / f"{fname}.csv"
+        path = self.path_recordings_dir / f"{fname}.csv"
         self.data_file_list.append(fname)
         with open(path, "w", newline="") as f:
             w = csv.writer(f, lineterminator="\n")
@@ -174,7 +183,7 @@ class Tools:
 
     def save_weights(self, pop_pre, pop_post, label):
         fname = f"weights_{label}"
-        path = self.recordings_dir / f"{fname}.csv"
+        path = self.path_recordings_dir / f"{fname}.csv"
         self.data_file_list.append(fname)
 
         conns = nest.GetConnections(pop_pre, pop_post)
@@ -198,9 +207,9 @@ class Tools:
         del data, conns
 
     def save_recordings(self, recorder_label, duration):
-        out_main = self.recordings_dir / f"{recorder_label}.csv"
+        out_main = self.path_recordings_dir / f"{recorder_label}.csv"
         fname = f"{recorder_label}_subset"
-        out_sub = self.recordings_dir / f"{fname}.csv"
+        out_sub = self.path_recordings_dir / f"{fname}.csv"
         self.data_file_list.append(fname)
 
         wrote_main = False
@@ -228,7 +237,7 @@ class Tools:
                     w.writeheader()
                 w.writerows(rows)
 
-        for fname in sorted(self.recordings_dir.glob(f"*{recorder_label}*")):
+        for fname in sorted(self.path_recordings_dir.glob(f"*{recorder_label}*")):
             if not (fname.name.endswith(".dat") or fname.name.endswith(".csv")):
                 continue
 
@@ -283,14 +292,14 @@ class Tools:
             fname.unlink()
 
     def get_events(self, prefix="", save=False):
-        files = sorted(self.recordings_dir.glob(f"{prefix}*multimeter_out*.dat"))
+        files = sorted(self.path_recordings_dir.glob(f"{prefix}*multimeter_out*.dat"))
         if not files:
             empty_i = np.empty(0, dtype=np.int64)
             empty_f = np.empty(0, dtype=np.float64)
             return empty_i, empty_f, empty_f
 
         senders, times, readout_signals, target_signals = [], [], [], []
-        out_path = self.recordings_dir / f"{prefix}_multimeter_out.csv"
+        out_path = self.path_recordings_dir / f"{prefix}_multimeter_out.csv"
 
         if save and out_path.exists():
             out_path.unlink()
@@ -330,7 +339,7 @@ class Tools:
         return senders[order], readout_signals[order], target_signals[order]
 
     def clear_events(self, prefix):
-        for path in sorted(self.recordings_dir.glob(f"{prefix}*multimeter_out*.dat")):
+        for path in sorted(self.path_recordings_dir.glob(f"{prefix}*multimeter_out*.dat")):
             path.unlink()
 
     def make_serializable(self, obj):
@@ -347,12 +356,12 @@ class Tools:
         return obj
 
     def save_kernel_status(self, kernel_status):
-        with open(self.recordings_dir / "kernel_status.json", "w") as f:
+        with open(self.path_recordings_dir / "kernel_status.json", "w") as f:
             json.dump(self.make_serializable(kernel_status), f, indent=4)
 
     def save_performance(self, iteration, loss, errors=[], phase_label=""):
         fname = "learning_performance"
-        path = self.recordings_dir / f"{fname}.csv"
+        path = self.path_recordings_dir / f"{fname}.csv"
         self.data_file_list.append(fname)
 
         do_append_errors = len(errors) > 0
@@ -382,12 +391,12 @@ class Tools:
         # from pathlib import Path
         # fname = (Path.home() / "log" / datetime.now().strftime("%Y-%m-%d_%u_%H-%M-%S")).with_suffix(".txt")
         # with open(fname, "w") as f:
-        #     f.write(self.cfg["file_name"] + "\n\n")
+        #     f.write(self.file_path.name + "\n\n")
         #     for l in self.loss:
         #         f.write(f"{l:.13f}\n")
         # exit()
 
-        # print(self.cfg["file_name"])
+        # print(self.file_path.name)
         # for l in self.loss:
         #     print(f"{l:.14f},")
         # exit()
@@ -469,7 +478,7 @@ class Tools:
             ],
         }
 
-        loss_reference = np.array(loss_map.get(self.cfg["file_name"]))
+        loss_reference = np.array(loss_map.get(self.file_path.name))
 
         if loss_reference is None:
             print("\nFAILURE: No reference loss.\n")
@@ -491,7 +500,7 @@ class Tools:
             print(f"\nSUCCESS: The loss matches the reference values.\n")
 
     def read_data(self, fname):
-        data = pd.read_csv(self.recordings_dir / f"{fname}.csv", engine="c")
+        data = pd.read_csv(self.path_recordings_dir / f"{fname}.csv", engine="c")
         return data
 
     def load_data(self, fname=""):

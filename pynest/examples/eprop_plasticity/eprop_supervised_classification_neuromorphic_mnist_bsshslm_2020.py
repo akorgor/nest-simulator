@@ -81,7 +81,6 @@ from pathlib import Path
 import nest
 import numpy as np
 import requests
-from IPython.display import Image
 from mpi4py import MPI
 from plotting import Plotter
 from toolbox import Tools
@@ -98,7 +97,7 @@ cfg = dict(
     average_gradient=False,
     batch_size=2,
     c_reg=50.0,
-    dataset_dir="./",
+    delete_existing_recordings=False,
     do_early_stopping=False,
     do_plotting=True,
     eta=5e-3,
@@ -109,15 +108,15 @@ cfg = dict(
     job_ntasks_per_node=1,
     learning_window=300,
     loss="cross_entropy",
-    model_nrn_rec="eprop_iaf_bsshslm_2020",
     n_iter_test=1,
     n_iter_train=5,
     n_iter_validate_every=10,
     record_dynamics=True,
     recurrent_connectivity=0.1,
-    remove_results_dir=False,
+    relative_path_data_dir="data",
+    relative_path_figures_dir="figures",
+    relative_path_recordings_dir="recordings",
     reset_neurons=True,
-    results_dir="./results",
     save_weights=True,
     scale_weight_inp_rec=0.03,
     scale_weight_out_rec=10.0,
@@ -153,7 +152,7 @@ total_num_virtual_procs = cfg["job_nodes"] * cfg["job_ntasks_per_node"] * local_
 # the input and output of the classification task above, and lists of the required NEST device, neuron, and
 # synapse models below. The connections that must be established are numbered 1 to 7.
 
-Image(filename=tools.file_parent_path / f"{tools.file_stem}.png")
+tools.show_image()
 
 # %% ###########################################################################################################
 # Initialize random generator
@@ -208,7 +207,7 @@ duration.update(dict((key, value * duration["step"]) for key, value in steps.ite
 # objects and set some NEST kernel parameters, some of which are e-prop-related.
 
 params_setup = dict(
-    data_path=str(tools.recordings_dir),  # path to save data to
+    data_path=str(tools.path_recordings_dir),  # path to save data to
     eprop_learning_window=duration["learning_window"],
     eprop_reset_neurons_on_update=cfg[
         "reset_neurons"
@@ -289,7 +288,7 @@ nrns_inp = nest.Create("parrot_neuron", n_in)
 # The suffix _bsshslm_2020 follows the NEST convention to indicate in the model name the paper
 # that introduced it by the first letter of the authors' last names and the publication year.
 
-nrns_rec = nest.Create(cfg["model_nrn_rec"], n_rec, params_nrn_rec)
+nrns_rec = nest.Create("eprop_iaf_bsshslm_2020", n_rec, params_nrn_rec)
 nrns_out = nest.Create("eprop_readout_bsshslm_2020", n_out, params_nrn_out)
 gen_rate_target = nest.Create("step_rate_generator", n_out)
 
@@ -647,8 +646,7 @@ def get_params_task_input_output(n_iter_interval, n_iter_curr, loader):
     return params_gen_spk_in, params_gen_rate_target
 
 
-save_path = cfg["dataset_dir"]  # path to save the N-MNIST dataset to
-train_path, test_path = download_and_extract_nmnist_dataset(save_path)
+train_path, test_path = download_and_extract_nmnist_dataset(tools.path_data_dir)
 
 selected_labels = [label for label in range(n_out)]
 
@@ -843,7 +841,8 @@ if cfg["save_weights"]:
 if cfg["do_plotting"]:
     data = tools.load_data()
     Plotter(
-        tools.results_dir,
+        __file__,
+        cfg["relative_path_figures_dir"],
         data,
         duration["task"],
         duration["sequence"],

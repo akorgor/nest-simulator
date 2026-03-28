@@ -82,7 +82,6 @@ References
 
 import nest
 import numpy as np
-from IPython.display import Image
 from mpi4py import MPI
 from plotting import Plotter
 from toolbox import Tools
@@ -93,6 +92,7 @@ from toolbox import Tools
 
 cfg = dict(
     batch_size=2,
+    delete_existing_recordings=False,
     do_early_stopping=False,
     do_plotting=True,
     eta=5e-3,
@@ -105,9 +105,9 @@ cfg = dict(
     n_iter_train=5,
     n_iter_validate_every=10,
     record_dynamics=True,
-    remove_results_dir=False,
+    relative_path_figures_dir="figures",
+    relative_path_recordings_dir="recordings",
     reset_neurons=True,
-    results_dir="./results",
     save_weights=True,
     seed=1,
     verify=True,
@@ -132,7 +132,7 @@ total_num_virtual_procs = cfg["job_nodes"] * cfg["job_ntasks_per_node"] * local_
 # the input and output of the classification task above, and lists of the required NEST device, neuron, and
 # synapse models below. The connections that must be established are numbered 1 to 7.
 
-Image(filename=tools.file_parent_path / f"{tools.file_stem}.png")
+tools.show_image()
 
 # %% ###########################################################################################################
 # Initialize random generator
@@ -200,7 +200,7 @@ duration.update(dict((key, value * duration["step"]) for key, value in steps.ite
 # objects and set some NEST kernel parameters, some of which are e-prop-related.
 
 params_setup = dict(
-    data_path=str(tools.recordings_dir),  # path to save data to
+    data_path=str(tools.path_recordings_dir),  # path to save data to
     eprop_learning_window=duration["learning_window"],
     eprop_reset_neurons_on_update=cfg[
         "reset_neurons"
@@ -808,7 +808,8 @@ if cfg["save_weights"]:
 if cfg["do_plotting"]:
     data = tools.load_data()
     Plotter(
-        tools.results_dir,
+        __file__,
+        cfg["relative_path_figures_dir"],
         data,
         duration["task"],
         duration["sequence"],

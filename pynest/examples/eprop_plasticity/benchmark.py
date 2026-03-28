@@ -1,18 +1,24 @@
 import json
+import shutil
 from pathlib import Path
 
 import nest
 import numpy as np
 
-results_dir = Path(__file__).resolve().parent.parent
-script_dir = results_dir / "scripts"
-recordings_dir = results_dir / "recordings"
+file_path = Path(__file__)
+
+with open(file_path.parent / "config.json", "r") as f:
+    cfg = json.load(f)
 
 if nest.Rank() == 0:
-    recordings_dir.mkdir(exist_ok=True)
-
-with open(script_dir / "config.json", "r") as f:
-    cfg = json.load(f)
+    path_recordings_dir = file_path.parent / cfg["relative_path_recordings_dir"]
+    if any(path_recordings_dir.iterdir()) and cfg["delete_existing_recordings"]:
+        shutil.rmtree(path_recordings_dir)
+    else:
+        print(
+            "\nWARNING: The recordings directory is not empty. This may cause the run to fail if overwriting is disabled or lead to incorrect results.\n"
+        )
+    path_recordings_dir.mkdir(exist_ok=True)
 
 local_num_threads = cfg["job_cpus_per_task"]
 total_num_virtual_procs = cfg["job_nodes"] * cfg["job_ntasks_per_node"] * local_num_threads
@@ -142,5 +148,5 @@ if nest.Rank() == 0:
         if key.startswith("time"):
             results[key] = kernel_status[key]
 
-    with open(recordings_dir / "results.json", "w") as f:
+    with open(path_recordings_dir / "results.json", "w") as f:
         json.dump(results, f, indent=4)

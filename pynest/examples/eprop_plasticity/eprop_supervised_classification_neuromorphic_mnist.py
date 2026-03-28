@@ -82,7 +82,6 @@ from pathlib import Path
 import nest
 import numpy as np
 import requests
-from IPython.display import Image
 from mpi4py import MPI
 from plotting import Plotter
 from toolbox import Tools
@@ -98,7 +97,7 @@ cfg = dict(
     V_th=0.85,
     batch_size=2,
     c_reg=400.0,
-    dataset_dir="./",
+    delete_existing_recordings=False,
     do_early_stopping=False,
     do_plotting=True,
     eta=5e-6,
@@ -116,8 +115,9 @@ cfg = dict(
     n_iter_validate_every=10,
     record_dynamics=True,
     recurrent_connectivity=0.1,
-    remove_results_dir=False,
-    results_dir="./results",
+    relative_path_data_dir="data",
+    relative_path_figures_dir="figures",
+    relative_path_recordings_dir="recordings",
     save_weights=True,
     scale_weight_inp_rec=0.03,
     scale_weight_out_rec=10.0,
@@ -153,7 +153,7 @@ total_num_virtual_procs = cfg["job_nodes"] * cfg["job_ntasks_per_node"] * local_
 # the input and output of the classification task above, and lists of the required NEST device, neuron, and
 # synapse models below. The connections that must be established are numbered 1 to 7.
 
-Image(filename=tools.file_parent_path / f"{tools.file_stem}.png")
+tools.show_image()
 
 # %% ###########################################################################################################
 # Initialize random generator
@@ -210,7 +210,7 @@ duration.update(dict((key, value * duration["step"]) for key, value in steps.ite
 # objects and set some NEST kernel parameters.
 
 params_setup = dict(
-    data_path=str(tools.recordings_dir),  # path to save data to
+    data_path=str(tools.path_recordings_dir),  # path to save data to
     local_num_threads=local_num_threads,
     overwrite_files=False,  # if True, overwrite existing files
     print_time=False,  # if True, print time progress bar during simulation, set False if run as code cell
@@ -662,8 +662,7 @@ def get_params_task_input_output(n_iter_interval, n_iter_curr, loader):
     return params_gen_spk_in, params_gen_rate_target, params_gen_learning_window
 
 
-save_path = cfg["dataset_dir"]  # path to save the N-MNIST dataset to
-train_path, test_path = download_and_extract_nmnist_dataset(save_path)
+train_path, test_path = download_and_extract_nmnist_dataset(tools.path_data_dir)
 
 selected_labels = [label for label in range(n_out)]
 
@@ -856,7 +855,8 @@ if cfg["save_weights"]:
 if cfg["do_plotting"]:
     data = tools.load_data()
     Plotter(
-        tools.results_dir,
+        __file__,
+        cfg["relative_path_figures_dir"],
         data,
         duration["task"],
         duration["sequence"],

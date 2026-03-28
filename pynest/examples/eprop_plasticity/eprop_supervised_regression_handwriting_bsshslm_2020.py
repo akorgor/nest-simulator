@@ -89,7 +89,6 @@ References
 
 import nest
 import numpy as np
-from IPython.display import Image
 from mpi4py import MPI
 from plotting import Plotter
 from toolbox import Tools
@@ -99,7 +98,7 @@ from toolbox import Tools
 # ~~~~~
 
 cfg = dict(
-    dataset_dir="./",
+    delete_existing_recordings=False,
     do_plotting=True,
     exc_to_inh_ratio=1.0,
     job_cpus_per_task=1,
@@ -107,9 +106,10 @@ cfg = dict(
     job_ntasks_per_node=1,
     n_iter_train=5,
     record_dynamics=True,
-    remove_results_dir=False,
     reset_neurons=True,
-    results_dir="./results",
+    relative_path_data_dir="data",
+    relative_path_figures_dir="figures",
+    relative_path_recordings_dir="recordings",
     save_weights=True,
     seed=1,
     verify=True,
@@ -134,7 +134,7 @@ total_num_virtual_procs = cfg["job_nodes"] * cfg["job_ntasks_per_node"] * local_
 # the input and output of the pattern generation task above, and lists of the required NEST device, neuron, and
 # synapse models below. The connections that must be established are numbered 1 to 6.
 
-Image(filename=tools.file_parent_path / f"{tools.file_stem}.png")
+tools.show_image()
 
 # %% ###########################################################################################################
 # Initialize random generator
@@ -153,7 +153,7 @@ np.random.seed(cfg["seed"])  # fix numpy random seed
 batch_size = 1  # batch size
 n_iter_train = cfg["n_iter_train"]  # number of iterations, 5000 to reach convergence as in the figure
 
-data_file_name = f"{cfg['dataset_dir']}/chaos_handwriting.txt"  # name of file with task data
+data_file_name = tools.path_data_dir / "chaos_handwriting.txt"  # path to file containing task data
 data = np.loadtxt(data_file_name)
 
 steps = dict(
@@ -189,7 +189,7 @@ duration.update(dict((key, value * duration["step"]) for key, value in steps.ite
 # objects and set some NEST kernel parameters, some of which are e-prop-related.
 
 params_setup = dict(
-    data_path=str(tools.recordings_dir),  # path to save data to
+    data_path=str(tools.path_recordings_dir),  # path to save data to
     eprop_learning_window=duration["learning_window"],
     eprop_reset_neurons_on_update=cfg[
         "reset_neurons"
@@ -620,7 +620,8 @@ if cfg["save_weights"]:
 if cfg["do_plotting"]:
     data = tools.load_data()
     Plotter(
-        tools.results_dir,
+        __file__,
+        cfg["relative_path_figures_dir"],
         data,
         duration["task"],
         duration["sequence"],

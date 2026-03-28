@@ -1,4 +1,5 @@
 from collections import OrderedDict as odict
+from pathlib import Path
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -9,7 +10,8 @@ from cycler import cycler
 class Plotter:
     def __init__(
         self,
-        results_dir,
+        file_path,
+        relative_path_figures_dir,
         data,
         duration_task,
         duration_sequence,
@@ -20,8 +22,8 @@ class Plotter:
         record_dynamics,
         include_plot_pattern,
     ):
-        self.figures_dir = results_dir / "figures"
-        self.figures_dir.mkdir(parents=True, exist_ok=True)
+        self.path_figures_dir = (Path(file_path).parent / relative_path_figures_dir).resolve()
+        self.path_figures_dir.mkdir(parents=True, exist_ok=True)
         self.data = data
         self.duration_task = duration_task
         self.duration_sequence = duration_sequence
@@ -101,7 +103,7 @@ class Plotter:
         ax.axis("equal")
 
         fig.tight_layout()
-        fig.savefig(self.figures_dir / "fig_pattern.pdf")
+        fig.savefig(self.path_figures_dir / "fig_pattern.pdf")
 
     def plot_learning_performance(self):
         """
@@ -137,7 +139,7 @@ class Plotter:
 
         fig.align_ylabels()
         fig.tight_layout()
-        fig.savefig(self.figures_dir / "fig_learning_performance.pdf")
+        fig.savefig(self.path_figures_dir / "fig_learning_performance.pdf")
 
     def plot_weight_matrices(self):
         """
@@ -185,7 +187,7 @@ class Plotter:
         plt.colorbar(cmesh, cax=axs[1, 1].inset_axes([1.1, 0.2, 0.05, 0.8]), label="Weight (pA)")
 
         fig.tight_layout()
-        fig.savefig(self.figures_dir / "fig_weight-matrices.pdf")
+        fig.savefig(self.path_figures_dir / "fig_weight-matrices.pdf")
 
     def build_recordables_list(self):
         """
@@ -302,7 +304,7 @@ class Plotter:
             axs[-1].set_xlim(*xlims)
 
             fig.align_ylabels()
-            fig.savefig(self.figures_dir / f"fig_recordables_{title.lower()}-training.pdf")
+            fig.savefig(self.path_figures_dir / f"fig_recordables_{title.lower()}-training.pdf")
 
     def plot_weight_time_courses(self):
         """
@@ -350,7 +352,7 @@ class Plotter:
 
         fig.align_ylabels()
         fig.tight_layout()
-        fig.savefig(self.figures_dir / "fig_weight-time-courses.pdf")
+        fig.savefig(self.path_figures_dir / "fig_weight-time-courses.pdf")
 
     def plot_all(self):
         """
