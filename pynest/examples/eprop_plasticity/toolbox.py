@@ -189,13 +189,13 @@ class Tools:
         conns = nest.GetConnections(pop_pre, pop_post)
         data = conns.get(["source", "target", "weight"])
 
-        rename = {
+        field_rename_map = {
             "source": "sender",
             "target": "receiver",
         }
 
         keys = list(data.keys())
-        out_keys = [rename.get(k, k) for k in keys]
+        out_keys = [field_rename_map.get(k, k) for k in keys]
         n = len(next(iter(data.values()))) if keys else 0
 
         with open(path, "w", newline="") as f:
@@ -207,89 +207,112 @@ class Tools:
         del data, conns
 
     def save_recordings(self, recorder_label, duration):
-        out_main = self.path_recordings_dir / f"{recorder_label}.csv"
-        fname = f"{recorder_label}_subset"
-        out_sub = self.path_recordings_dir / f"{fname}.csv"
-        self.data_file_list.append(fname)
 
-        wrote_main = False
-        wrote_sub = False
+        time_margin = 50.0
+        duration_sequence = duration["sequence"]
+        duration_task = duration["task"]
 
-        t_margin = 50.0
-        seq = duration["sequence"]
-        task = duration["task"]
+        field_rename_map = dict(
+            senders="sender",
+            time_ms="time",
+            times="time",
+            weights="weight",
+            receptors="receptor",
+            ports="port",
+            targets="receiver",
+        )
 
-        rename = {
-            "senders": "sender",
-            "time_ms": "time",
-            "times": "time",
-            "weights": "weight",
-            "receptors": "receptor",
-            "ports": "port",
-            "targets": "receiver",
-        }
+        file_path_main = self.path_recordings_dir / f"{recorder_label}.csv"
+        file_path_sub = self.path_recordings_dir / f"{recorder_label}_subset.csv"
+        self.data_file_list.append(file_path_sub.stem)
 
-        def flush_rows(path, rows, fieldnames, wrote_header_flag):
-            mode = "a" if wrote_header_flag else "w"
-            with open(path, mode, newline="") as f:
-                w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
-                if not wrote_header_flag:
-                    w.writeheader()
-                w.writerows(rows)
+        writer_main, writer_sub = None, None
+        file_main, file_sub = None, None
+        fieldnames_main, fieldnames_sub = None, None
 
-        for fname in sorted(self.path_recordings_dir.glob(f"*{recorder_label}*")):
-            if not (fname.name.endswith(".dat") or fname.name.endswith(".csv")):
-                continue
+        flush_every = 10000
+        row_counter = 0
 
-            with open(fname, newline="") as f:
-                if fname.name.endswith(".dat"):
-                    for _ in range(2):
-                        next(f, None)
-                    reader = csv.DictReader(f, delimiter="\t")
-                else:
-                    reader = csv.DictReader(f)
-
-                in_fields = reader.fieldnames or []
-                out_fields = []
-                seen = set()
-                for k in in_fields:
-                    kk = rename.get(k, k)
-                    if kk not in seen:
-                        out_fields.append(kk)
-                        seen.add(kk)
-
-                if not out_fields:
-                    fname.unlink()
+        try:
+            for file_path_input in sorted(self.path_recordings_dir.glob(f"*{recorder_label}*")):
+                if not (file_path_input.name.endswith(".dat") or file_path_input.name.endswith(".csv")):
                     continue
 
-                main_rows = []
-                sub_rows = []
+                if file_path_input in {file_path_main, file_path_sub}:
+                    continue
 
-                for row in reader:
-                    out = {rename.get(k, k): v for k, v in row.items()}
+                with open(file_path_input, newline="") as file_input:
+                    if file_path_input.name.endswith(".dat"):
+                        for _ in range(2):
+                            next(file_input, None)
+                        reader = csv.DictReader(file_input, delimiter="\t")
+                    else:
+                        reader = csv.DictReader(file_input)
 
-                    t = out.get("time", "")
-                    try:
-                        t = float(t) if t != "" and t is not None else None
-                    except ValueError:
-                        t = None
+                    fieldnames_input = reader.fieldnames or []
+                    fieldnames_output = []
+                    fieldnames_seen = set()
+                    for fieldname_input in fieldnames_input:
+                        fieldname_output = field_rename_map.get(fieldname_input, fieldname_input)
+                        if fieldname_output not in fieldnames_seen:
+                            fieldnames_output.append(fieldname_output)
+                            fieldnames_seen.add(fieldname_output)
 
-                    main_rows.append(out)
+                    if not fieldnames_output:
+                        file_path_input.unlink()
+                        continue
 
-                    if t is not None:
-                        if (t < seq + t_margin) or (t >= task - seq - t_margin):
-                            sub_rows.append(out)
+                    if writer_main is None:
+                        file_main = open(file_path_main, "w", newline="")
+                        writer_main = csv.DictWriter(file_main, fieldnames=fieldnames_output, extrasaction="ignore")
+                        writer_main.writeheader()
+                        fieldnames_main = fieldnames_output
 
-            if main_rows:
-                flush_rows(out_main, main_rows, out_fields, wrote_main)
-                wrote_main = True
+                    if writer_sub is None:
+                        file_sub = open(file_path_sub, "w", newline="")
+                        writer_sub = csv.DictWriter(file_sub, fieldnames=fieldnames_output, extrasaction="ignore")
+                        writer_sub.writeheader()
+                        fieldnames_sub = fieldnames_output
 
-            if sub_rows:
-                flush_rows(out_sub, sub_rows, out_fields, wrote_sub)
-                wrote_sub = True
+                    for row in reader:
+                        row_renamed = {field_rename_map.get(k, k): v for k, v in row.items()}
 
-            del main_rows, sub_rows
-            fname.unlink()
+                        if fieldnames_output != fieldnames_main:
+                            row_main_output = {k: row_renamed.get(k, "") for k in fieldnames_main}
+                        else:
+                            row_main_output = row_renamed
+
+                        writer_main.writerow(row_main_output)
+
+                        time_value = row_renamed.get("time", "")
+                        try:
+                            time_value = float(time_value) if time_value not in ("", None) else None
+                        except ValueError:
+                            time_value = None
+
+                        if time_value is not None and (
+                            (time_value < duration_sequence + time_margin)
+                            or (time_value >= duration_task - duration_sequence - time_margin)
+                        ):
+                            if fieldnames_output != fieldnames_sub:
+                                row_sub_output = {k: row_renamed.get(k, "") for k in fieldnames_sub}
+                            else:
+                                row_sub_output = row_renamed
+                            writer_sub.writerow(row_sub_output)
+
+                        row_counter += 1
+                        if row_counter % flush_every == 0:
+                            for file_handle in [file_main, file_sub]:
+                                if file_handle is not None:
+                                    file_handle.flush()
+
+                file_path_input.unlink()
+
+        finally:
+            for file_handle in [file_main, file_sub]:
+                if file_handle is not None:
+                    file_handle.flush()
+                    file_handle.close()
 
     def get_events(self, prefix="", save=False):
         files = sorted(self.path_recordings_dir.glob(f"{prefix}*multimeter_out*.dat"))
