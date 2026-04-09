@@ -41,7 +41,7 @@ if min_recurrent_phase >= 1.0:
 
 if cfg["plasticity"] == "eprop_bio":
     model_syn_rec = "eprop_synapse"
-    model_nrn_rec = "eprop_iaf"
+    model_nrn_rec = "eprop_iaf_psc_delta"
     model_nrn_out = "eprop_readout"
     model_conn_fb = "eprop_learning_signal_connection"
     model_gen_rate = "step_rate_generator"
