@@ -148,5 +148,9 @@ if nest.Rank() == 0:
         if key.startswith("time"):
             results[key] = kernel_status[key]
 
+    for k, v in results.items():
+        if isinstance(v, np.ndarray):
+            results[k] = v.tolist()
+
     with open(path_recordings_dir / "results.json", "w") as f:
         json.dump(results, f, indent=4)
