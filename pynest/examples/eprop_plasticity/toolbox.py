@@ -50,11 +50,20 @@ class Tools:
             else:
                 orig[key] = val
 
+    def validate_keys(self, reference, overrides):
+        for key in overrides:
+            if key not in reference and not key.startswith("job"):
+                raise KeyError(f"Unknown config key: '{key}'")
+            if isinstance(overrides[key], dict) and isinstance(reference.get(key), dict):
+                self.validate_keys(reference[key], overrides[key])
+
     def load_cfg(self):
         cfg_path = self.file_path.parent / "config.json"
         if cfg_path.exists():
             with open(cfg_path) as f:
-                self.deep_update(self.cfg, json.load(f))
+                overrides = json.load(f)
+            self.validate_keys(self.cfg, overrides)
+            self.deep_update(self.cfg, overrides)
 
     def save_cfg(self):
         with open(self.path_recordings_dir / "config_derived.json", "w") as file:
