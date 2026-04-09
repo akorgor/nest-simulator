@@ -105,6 +105,7 @@ cfg = dict(
     n_iter_train=5,
     n_iter_validate_every=10,
     record_dynamics=True,
+    record_weights=True,
     relative_path_figures_dir="figures",
     relative_path_recordings_dir="recordings",
     reset_neurons=True,
@@ -390,6 +391,8 @@ if cfg["record_dynamics"]:
     sr_in = nest.Create("spike_recorder", params_sr_in)
     sr_reg = nest.Create("spike_recorder", params_sr_reg)
     sr_ad = nest.Create("spike_recorder", params_sr_ad)
+
+if cfg["record_weights"]:
     wr = nest.Create("weight_recorder", params_wr)
 
 mm_out = nest.Create("multimeter", params_mm_out)
@@ -524,6 +527,7 @@ if cfg["record_dynamics"]:
     nest.Connect(mm_reg, nrns_reg_record, params_conn_all_to_all, params_syn_static)
     nest.Connect(mm_ad, nrns_ad_record, params_conn_all_to_all, params_syn_static)
 
+if cfg["record_weights"]:
     tools.configure_weight_recorder_connections(wr, nrns_inp, nrns_rec, nrns_out, n_record_w)
     nest.SetDefaults(plastic_synapse_model, dict(weight_recorder=wr))
 
@@ -788,6 +792,8 @@ if cfg["record_dynamics"]:
     tools.save_recordings("spike_recorder_in", duration)
     tools.save_recordings("spike_recorder_reg", duration)
     tools.save_recordings("spike_recorder_ad", duration)
+
+if cfg["record_weights"]:
     tools.save_recordings("weight_recorder", duration)
 
 # %% ###########################################################################################################
