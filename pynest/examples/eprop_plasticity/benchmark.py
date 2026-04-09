@@ -32,6 +32,13 @@ duration = cfg["steps"] * dt
 
 offset = 2.0
 
+# Avoid spikes during the first few time steps, since they would require
+# retrieving parts of the e-prop history that have not yet been populated.
+
+min_recurrent_phase = dt * cfg["rate_rec"] / 1000.0
+if min_recurrent_phase >= 1.0:
+    raise ValueError("rate_rec is too high to avoid a first-step forced spike at the current resolution")
+
 if cfg["plasticity"] == "eprop_bio":
     model_syn_rec = "eprop_synapse"
     model_nrn_rec = "eprop_iaf"
@@ -75,7 +82,11 @@ nrns_out = nest.Create(model_nrn_out, n_out)
 
 if n_in > 0:
     if cfg["input_generator"] == "poisson_generator":
-        nrns_in = nest.Create("poisson_generator", n_in, dict(rate=cfg["rate_in"]))
+        nrns_in = nest.Create(
+            "poisson_generator",
+            n_in,
+            dict(rate=cfg["rate_in"], start=offset, stop=duration + offset),
+        )
     elif cfg["input_generator"] == "spike_generator":
         counts = rng.poisson(cfg["rate_in"] * duration / 1000.0, size=n_in)
         total_spikes = counts.sum()
@@ -100,7 +111,13 @@ if n_in > 0:
     )
 
 if "eprop" in cfg["plasticity"]:
-    nrns_rec.set(dict(ignore_and_fire=True, phase=nest.random.uniform(0.0, 1.0), rate=cfg["rate_rec"]))
+    nrns_rec.set(
+        dict(
+            ignore_and_fire=True,
+            phase=nest.random.uniform(min_recurrent_phase, 1.0),
+            rate=cfg["rate_rec"],
+        )
+    )
 
 if model_nrn_out == "iaf_psc_delta":
     nrns_out.set(dict(V_th=1e100))
