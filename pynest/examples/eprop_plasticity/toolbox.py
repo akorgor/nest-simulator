@@ -19,6 +19,8 @@ class Tools:
         self.save_cfg()
         self.loss = []
         self.data_file_list = []
+        self.neuron_types = dict()
+        self.rng = np.random.default_rng(self.cfg["seed"])
 
     def initialize_save_dirs(self):
         self.path_recordings_dir = (self.file_path.parent / self.cfg["relative_path_recordings_dir"]).resolve()
@@ -120,17 +122,15 @@ class Tools:
         existing_synapse_models = set(nest.GetKernelStatus()["synapse_models"])
 
         if weight_dale_enforced:
-            proportion_inh = 1.0 / (1.0 + self.cfg["exc_to_inh_ratio"])
-            senders_unique = np.unique(senders_arr)
-
-            n_senders_inh = round(len(senders_unique) * proportion_inh)
-
-            # Better: store this once on self and reuse it.
-            rng = np.random.default_rng(self.cfg["seed"])
-            senders_inh = set(rng.choice(senders_unique, n_senders_inh, replace=False))
-
-            is_inh = np.isin(senders_arr, list(senders_inh))
-            weights_arr = np.where(is_inh, -np.abs(weights_arr), np.abs(weights_arr))
+            weights = []
+            for sender in senders_arr:
+                if sender in self.neuron_types:
+                    weight = self.neuron_types[sender]
+                else:
+                    weight = 1 if self.rng.random() < self.cfg["exc_neuron_fraction"] else -1
+                    self.neuron_types[sender] = weight
+                weights.append(weight)
+            weights_arr = np.asarray(weights) 
 
             exc_mask = weights_arr >= 0.0
             inh_mask = ~exc_mask

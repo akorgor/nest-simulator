@@ -87,7 +87,7 @@ from toolbox import Tools
 cfg = dict(
     delete_existing_recordings=False,
     do_plotting=True,
-    exc_to_inh_ratio=1.0,
+    exc_neuron_fraction=0.5,
     job_cpus_per_task=1,
     job_nodes=1,
     job_ntasks_per_node=1,
