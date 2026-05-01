@@ -387,7 +387,7 @@ params_conn_one_to_one = dict(rule="one_to_one")
 params_common_syn_eprop = dict(
     optimizer=dict(
         type="gradient_descent",  # algorithm to optimize the weights
-        batch_size=batch_size,
+        batch_size=1,
         Wmin=-100.0,  # pA, minimal limit of the synaptic weights
         Wmax=100.0,  # pA, maximal limit of the synaptic weights
     ),
