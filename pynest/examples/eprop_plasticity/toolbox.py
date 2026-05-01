@@ -139,12 +139,12 @@ class Tools:
                 (
                     exc_mask,
                     "exc",
-                    {"weight": 0.0, "optimizer": {"Wmin": 0.0, "Wmax": 100.0}},
+                    dict(weight=0.0, optimizer= dict(Wmin=0.0, Wmax=100.0)),
                 ),
                 (
                     inh_mask,
                     "inh",
-                    {"weight": -100.0, "optimizer": {"Wmin": -100.0, "Wmax": 0.0}},
+                    dict(weight=-100.0, optimizer= dict(Wmin=-100.0, Wmax=0.0)),
                 ),
             ):
                 if not np.any(mask):
@@ -198,10 +198,10 @@ class Tools:
         conns = nest.GetConnections(pop_pre, pop_post)
         data = conns.get(["source", "target", "weight"])
 
-        field_rename_map = {
-            "source": "sender",
-            "target": "receiver",
-        }
+        field_rename_map = dict(
+            source="sender",
+            target="receiver",
+        )
 
         keys = list(data.keys())
         out_keys = [field_rename_map.get(k, k) for k in keys]
