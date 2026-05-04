@@ -14,15 +14,15 @@ class Tools:
     def __init__(self, cfg, file_path):
         self.file_path = Path(file_path)
         self.cfg = cfg
-        self.load_cfg()
-        self.initialize_save_dirs()
-        self.save_cfg()
+        self._load_cfg()
+        self._initialize_save_dirs()
+        self._save_cfg()
         self.loss = []
         self.data_file_list = []
         self.neuron_types = dict()
         self.rng = np.random.default_rng(self.cfg["seed"])
 
-    def initialize_save_dirs(self):
+    def _initialize_save_dirs(self):
         self.path_recordings_dir = (self.file_path.parent / self.cfg["relative_path_recordings_dir"]).resolve()
         if self.path_recordings_dir.is_dir():
             if any(self.path_recordings_dir.iterdir()):
@@ -45,33 +45,33 @@ class Tools:
         except:
             pass
 
-    def deep_update(self, orig, new):
+    def _deep_update(self, orig, new):
         for key, val in new.items():
             if isinstance(orig.get(key), dict) and isinstance(val, Mapping):
-                self.deep_update(orig[key], val)
+                self._deep_update(orig[key], val)
             else:
                 orig[key] = val
 
-    def validate_keys(self, reference, overrides):
+    def _validate_keys(self, reference, overrides):
         for key in overrides:
             if key not in reference and not key.startswith("job"):
                 raise KeyError(f"Unknown config key: '{key}'")
             if isinstance(overrides[key], dict) and isinstance(reference.get(key), dict):
-                self.validate_keys(reference[key], overrides[key])
+                self._validate_keys(reference[key], overrides[key])
 
-    def load_cfg(self):
+    def _load_cfg(self):
         cfg_path = self.file_path.parent / "config.json"
         if cfg_path.exists():
             with open(cfg_path) as f:
                 overrides = json.load(f)
-            self.validate_keys(self.cfg, overrides)
-            self.deep_update(self.cfg, overrides)
+            self._validate_keys(self.cfg, overrides)
+            self._deep_update(self.cfg, overrides)
 
-    def save_cfg(self):
+    def _save_cfg(self):
         with open(self.path_recordings_dir / "config_derived.json", "w") as file:
             json.dump(self.cfg, file, indent=4)
 
-    def sample_recordable_connections(self, nrns_inp, nrns_rec, nrns_out, n_record_w):
+    def _sample_recordable_connections(self, nrns_inp, nrns_rec, nrns_out, n_record_w):
         senders_list = []
         receivers_list = []
 
@@ -96,7 +96,7 @@ class Tools:
         return np.unique(np.concatenate(senders_list)), np.unique(np.concatenate(receivers_list))
 
     def configure_weight_recorder_connections(self, wr, nrns_inp, nrns_rec, nrns_out, n_record_w):
-        senders, receivers = self.sample_recordable_connections(nrns_inp, nrns_rec, nrns_out, n_record_w)
+        senders, receivers = self._sample_recordable_connections(nrns_inp, nrns_rec, nrns_out, n_record_w)
         if len(senders) > 0:
             wr.set(senders=senders, targets=receivers)
 
@@ -374,7 +374,7 @@ class Tools:
         for path in sorted(self.path_recordings_dir.glob(f"{prefix}*multimeter_out*.dat")):
             path.unlink()
 
-    def make_serializable(self, obj):
+    def _make_serializable(self, obj):
         if isinstance(obj, float) and (math.isinf(obj) or math.isnan(obj)):
             return str(obj)
         if isinstance(obj, np.ndarray):
@@ -382,14 +382,14 @@ class Tools:
         if isinstance(obj, tuple):
             return list(obj)
         if isinstance(obj, dict):
-            return dict((k, self.make_serializable(v)) for k, v in obj.items())
+            return dict((k, self._make_serializable(v)) for k, v in obj.items())
         if isinstance(obj, list):
-            return [self.make_serializable(i) for i in obj]
+            return [self._make_serializable(i) for i in obj]
         return obj
 
     def save_kernel_status(self, kernel_status):
         with open(self.path_recordings_dir / "kernel_status.json", "w") as f:
-            json.dump(self.make_serializable(kernel_status), f, indent=4)
+            json.dump(self._make_serializable(kernel_status), f, indent=4)
 
     def save_performance(self, iteration, loss, errors=[], phase_label=""):
         fname = "learning_performance"
@@ -531,7 +531,7 @@ class Tools:
         else:
             print(f"\nSUCCESS: The loss matches the reference values.\n")
 
-    def read_data(self, fname):
+    def _read_data(self, fname):
         data = pd.read_csv(self.path_recordings_dir / f"{fname}.csv", engine="c")
         return data
 
@@ -539,7 +539,7 @@ class Tools:
         if fname == "":
             data = dict()
             for fname in self.data_file_list:
-                data[fname] = self.read_data(fname)
+                data[fname] = self._read_data(fname)
         else:
-            data = self.read_data(fname)
+            data = self._read_data(fname)
         return data
