@@ -101,74 +101,84 @@ class Tools:
             wr.set(senders=senders, targets=receivers)
 
     def constrain_weights(self, pop_sender, pop_receiver, syn_spec, label):
-
         weight_sign_fixed = self.cfg[f"weight_sign_fixed_{label}"]
         weight_dale_enforced = self.cfg[f"weight_dale_enforced_{label}"]
+
         if not (weight_sign_fixed or weight_dale_enforced):
             return
 
         conns = nest.GetConnections(pop_sender, pop_receiver)
+
         if len(conns) == 0:
             return
+
         senders_arr = np.asarray(conns.source)
         receivers_arr = np.asarray(conns.target)
         weights_arr = np.asarray(conns.weight, dtype=float)
         delays_arr = np.asarray(conns.delay, dtype=float)
+
         synapse_models = np.unique(conns.synapse_model)
 
         if len(synapse_models) != 1:
             raise ValueError(f"Expected exactly one synapse model, got {list(synapse_models)}")
+
         base_synapse_model = synapse_models[0]
         existing_synapse_models = set(nest.GetKernelStatus()["synapse_models"])
 
         if weight_dale_enforced:
-            weights = []
+            signs = []
+
             for sender in senders_arr:
-                if sender in self.neuron_types:
-                    weight = self.neuron_types[sender]
-                else:
-                    weight = 1 if self.rng.random() < self.cfg["exc_neuron_fraction"] else -1
-                    self.neuron_types[sender] = weight
-                weights.append(weight)
-            weights_arr = np.asarray(weights) 
+                sender = int(sender)
 
-            exc_mask = weights_arr >= 0.0
-            inh_mask = ~exc_mask
+                if sender not in self.neuron_types:
+                    self.neuron_types[sender] = 1.0 if self.rng.random() < self.cfg["exc_neuron_fraction"] else -1.0
 
-            for mask, suffix, sign_params in (
-                (
-                    exc_mask,
-                    "exc",
-                    dict(weight=0.0, optimizer= dict(Wmin=0.0, Wmax=100.0)),
-                ),
-                (
-                    inh_mask,
-                    "inh",
-                    dict(weight=-100.0, optimizer= dict(Wmin=-100.0, Wmax=0.0)),
-                ),
-            ):
-                if not np.any(mask):
-                    continue
+                signs.append(self.neuron_types[sender])
 
-                synapse_model = f"{base_synapse_model}_{suffix}"
+            signs_arr = np.asarray(signs, dtype=float)
+            weights_arr = np.abs(weights_arr) * signs_arr
 
-                if synapse_model not in existing_synapse_models:
-                    nest.CopyModel(base_synapse_model, synapse_model, sign_params)
-                    existing_synapse_models.add(synapse_model)
+        elif weight_sign_fixed:
+            weights_arr = np.where(weights_arr >= 0.0, np.abs(weights_arr), -np.abs(weights_arr))
 
-                nest.Connect(
-                    senders_arr[mask],
-                    receivers_arr[mask],
-                    "one_to_one",
-                    {
-                        **syn_spec,
-                        "synapse_model": synapse_model,
-                        "weight": weights_arr[mask],
-                        "delay": delays_arr[mask],
-                    },
-                )
+        exc_mask = weights_arr >= 0.0
+        inh_mask = weights_arr < 0.0
 
-            nest.Disconnect(conns)
+        for mask, suffix, sign_params in (
+            (
+                exc_mask,
+                "exc",
+                dict(weight=0.0, optimizer=dict(Wmin=0.0, Wmax=100.0)),
+            ),
+            (
+                inh_mask,
+                "inh",
+                dict(weight=-100.0, optimizer=dict(Wmin=-100.0, Wmax=0.0)),
+            ),
+        ):
+            if not np.any(mask):
+                continue
+
+            synapse_model = f"{base_synapse_model}_{suffix}"
+
+            if synapse_model not in existing_synapse_models:
+                nest.CopyModel(base_synapse_model, synapse_model, sign_params)
+                existing_synapse_models.add(synapse_model)
+
+            nest.Connect(
+                senders_arr[mask],
+                receivers_arr[mask],
+                conn_spec="one_to_one",
+                syn_spec={
+                    **syn_spec,
+                    "synapse_model": synapse_model,
+                    "weight": weights_arr[mask],
+                    "delay": delays_arr[mask],
+                },
+            )
+
+        nest.Disconnect(conns)
 
     def set_synapse_defaults(self, eta):
         for synapse_model in nest.synapse_models:
