@@ -69,7 +69,7 @@ class Tools:
 
     def _save_cfg(self):
         with open(self.path_recordings_dir / "config_derived.json", "w") as file:
-            json.dump(self.cfg, file, indent=4)
+            json.dump(self.cfg, file, indent=4, sort_keys=True)
 
     def _sample_recordable_connections(self, nrns_inp, nrns_rec, nrns_out, n_record_w):
         senders_list = []
@@ -389,7 +389,7 @@ class Tools:
 
     def save_kernel_status(self, kernel_status):
         with open(self.path_recordings_dir / "kernel_status.json", "w") as f:
-            json.dump(self._make_serializable(kernel_status), f, indent=4)
+            json.dump(self._make_serializable(kernel_status), f, indent=4, sort_keys=True)
 
     def save_performance(self, iteration, loss, errors=[], phase_label=""):
         fname = "learning_performance"
