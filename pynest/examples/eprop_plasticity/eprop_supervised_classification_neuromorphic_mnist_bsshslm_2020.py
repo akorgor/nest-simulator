@@ -108,6 +108,7 @@ cfg = dict(
     job_ntasks_per_node=1,
     learning_window=300,
     loss="cross_entropy",
+    n_iter_train_chunk=5,
     n_iter_test=1,
     n_iter_train=5,
     n_iter_validate_every=10,
@@ -175,6 +176,7 @@ np.random.seed(cfg["seed"])  # fix numpy random seed
 
 batch_size = cfg["batch_size"]  # batch size, 100 for convergence
 n_iter_train = cfg["n_iter_train"]  # number of training iterations, 200 for convergence
+n_iter_train_chunk = cfg["n_iter_train_chunk"]  # chunk training iterations to reduce memory usage
 n_iter_test = cfg["n_iter_test"]  # number of iterations for final test
 do_early_stopping = cfg["do_early_stopping"]  # if True, stop training as soon as stop criterion fulfilled
 n_iter_validate_every = cfg["n_iter_validate_every"]  # number of training iterations before validation
@@ -762,7 +764,8 @@ class TrainingPipeline:
                         break
                 self.run_phase("training", eta_train, n_iter_validate_every, True)
         else:
-            self.run_phase("training", eta_train, n_iter_train, True)
+            for self.k_iter in range(0, n_iter_train, n_iter_train_chunk):
+                self.run_phase("training", eta_train, n_iter_train_chunk, True)
 
         self.run_phase("test", eta_test, n_iter_test, True)
 
