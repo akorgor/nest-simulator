@@ -105,6 +105,7 @@ cfg = dict(
     n_iter_train=5,
     n_iter_train_chunk=5,
     n_iter_validate_every=10,
+    perturbation=False,
     record_dynamics=True,
     record_weights=True,
     relative_path_figures_dir="figures",
@@ -541,6 +542,14 @@ nest.GetConnections(nrns_rec[0], nrns_rec[1:3]).set([params_init_optimizer] * 2)
 tools.constrain_weights(nrns_inp, nrns_rec, params_syn_in, "inp")
 tools.constrain_weights(nrns_rec, nrns_rec, params_syn_rec, "rec")
 tools.constrain_weights(nrns_rec, nrns_out, params_syn_out, "out")
+
+if cfg["perturbation"]:
+    sg_perturb = nest.Create("spike_generator", dict(spike_times=[duration["sequence"]*batch_size*2]))
+    conns_dict = nest.GetConnections(nrns_rec[0], nrns_rec+nrns_out).get(["target", "weight"])
+    conn_target = np.array(conns_dict["target"])
+    conn_weight= np.array(conns_dict["weight"])
+    idc = np.argsort(conn_target)
+    nest.Connect([sg_perturb.get("global_id")]*len(idc), conn_target[idc], conn_spec="one_to_one", syn_spec=dict(weight=conn_weight[idc]))
 
 # %% ###########################################################################################################
 # Create input and output
