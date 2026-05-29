@@ -63,6 +63,12 @@ elif cfg["plasticity"] == "stdp":
     model_nrn_out = "iaf_psc_delta"
     model_conn_fb = None
     model_gen_rate = None
+elif cfg["plasticity"] == "regular":
+    model_syn_rec = "static_synapse"
+    model_nrn_rec = "iaf_psc_delta"
+    model_nrn_out = "iaf_psc_delta"
+    model_conn_fb = None
+    model_gen_rate = None
 else:
     raise ValueError(f"Unknown plasticity type: {cfg['plasticity']}")
 
