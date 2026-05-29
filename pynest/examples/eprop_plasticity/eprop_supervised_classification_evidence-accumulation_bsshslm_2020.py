@@ -250,15 +250,15 @@ params_nrn_out = dict(
 )
 
 params_nrn_reg = dict(
-    beta=1.0,  # width scaling of the pseudo-derivative
     C_m=1.0,
     c_reg=300.0,  # coefficient of firing rate regularization - 2*learning_window*(TF c_reg) for technical reasons
     E_L=0.0,
     f_target=10.0,  # spikes/s, target firing rate for firing rate regularization
-    gamma=0.3,  # height scaling of the pseudo-derivative
     I_e=0.0,
     regular_spike_arrival=True,
     surrogate_gradient_function="piecewise_linear",  # surrogate gradient / pseudo-derivative function
+    surrogate_gradient_height=0.3,  # height scaling of the pseudo-derivative
+    surrogate_gradient_width=1.0,  # width scaling of the pseudo-derivative
     t_ref=5.0,  # ms, duration of refractory period
     tau_m=20.0,
     V_m=0.0,
@@ -267,29 +267,29 @@ params_nrn_reg = dict(
 )
 
 # factors from the original pseudo-derivative definition are incorporated into the parameters
-params_nrn_reg["gamma"] /= params_nrn_reg["V_th"]
-params_nrn_reg["beta"] /= np.abs(params_nrn_reg["V_th"])  # prefactor is inside abs in the original definition
+params_nrn_reg["surrogate_gradient_height"] /= params_nrn_reg["V_th"]
+params_nrn_reg["surrogate_gradient_width"] *= np.abs(params_nrn_reg["V_th"])  # prefactor is inside abs in the original definition
 
 params_nrn_ad = dict(
-    beta=1.0,
     adapt_tau=2000.0,  # ms, time constant of adaptive threshold
     adaptation=0.0,  # initial value of the spike threshold adaptation
     C_m=1.0,
     c_reg=300.0,
     E_L=0.0,
     f_target=10.0,
-    gamma=0.3,
     I_e=0.0,
     regular_spike_arrival=True,
     surrogate_gradient_function="piecewise_linear",
+    surrogate_gradient_height=0.3,
+    surrogate_gradient_width=1.0,
     t_ref=5.0,
     tau_m=20.0,
     V_m=0.0,
     V_th=0.6,
 )
 
-params_nrn_ad["gamma"] /= params_nrn_ad["V_th"]
-params_nrn_ad["beta"] /= np.abs(params_nrn_ad["V_th"])
+params_nrn_ad["surrogate_gradient_height"] /= params_nrn_ad["V_th"]
+params_nrn_ad["surrogate_gradient_width"] *= np.abs(params_nrn_ad["V_th"])
 
 params_nrn_ad["adapt_beta"] = 1.7 * (
     (1.0 - np.exp(-duration["step"] / params_nrn_ad["adapt_tau"]))

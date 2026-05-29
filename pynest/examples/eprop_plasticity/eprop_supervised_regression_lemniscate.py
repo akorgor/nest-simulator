@@ -216,18 +216,18 @@ params_nrn_out = dict(
 tau_m_mean = 30.0  # ms, mean of membrane time constant distribution
 
 params_nrn_rec = dict(
-    beta=33.3,  # width scaling of the pseudo-derivative
     adapt_tau=2000.0,  # ms, time constant of adaptive threshold
     C_m=250.0,
     c_reg=0.12,  # coefficient of firing rate regularization
     E_L=0.0,
     eprop_isi_trace_cutoff=100,
     f_target=20.0,  # spikes/s, target firing rate for firing rate regularization
-    gamma=10.0,  # height scaling of the pseudo-derivative
     I_e=0.0,
     kappa=0.99,  # low-pass filter of the eligibility trace
     kappa_reg=0.99,  # low-pass filter of the firing rate for regularization
     surrogate_gradient_function="piecewise_linear",  # surrogate gradient / pseudo-derivative function
+    surrogate_gradient_height=10.0,  # height scaling of the pseudo-derivative
+    surrogate_gradient_width=0.03,  # width scaling of the pseudo-derivative
     t_ref=0.0,  # ms, duration of refractory period
     tau_m=nest.random.normal(mean=tau_m_mean, std=2.0),
     V_m=0.0,

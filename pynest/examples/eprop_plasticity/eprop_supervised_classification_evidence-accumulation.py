@@ -239,17 +239,17 @@ params_nrn_out = dict(
 )
 
 params_nrn_reg = dict(
-    beta=1.7,  # width scaling of the pseudo-derivative
     C_m=1.0,
     c_reg=300.0 / duration["sequence"] * duration["learning_window"],  # coefficient of firing rate regularization
     E_L=0.0,
     eprop_isi_trace_cutoff=100,
     f_target=10.0,  # spikes/s, target firing rate for firing rate regularization
-    gamma=0.5,  # height scaling of the pseudo-derivative
     I_e=0.0,
     kappa=0.95,  # low-pass filter of the eligibility trace
     kappa_reg=0.95,  # low-pass filter of the firing rate for regularization
     surrogate_gradient_function="piecewise_linear",  # surrogate gradient / pseudo-derivative function
+    surrogate_gradient_height=0.5,  # height scaling of the pseudo-derivative
+    surrogate_gradient_width=0.59,  # width scaling of the pseudo-derivative
     t_ref=5.0,  # ms, duration of refractory period
     tau_m=20.0,
     V_m=0.0,
@@ -258,7 +258,6 @@ params_nrn_reg = dict(
 )
 
 params_nrn_ad = dict(
-    beta=1.7,
     adapt_tau=2000.0,  # ms, time constant of adaptive threshold
     adaptation=0.0,  # initial value of the spike threshold adaptation
     C_m=1.0,
@@ -266,11 +265,12 @@ params_nrn_ad = dict(
     E_L=0.0,
     eprop_isi_trace_cutoff=100,  # cutoff of integration of eprop trace between spikes
     f_target=10.0,
-    gamma=0.5,
     I_e=0.0,
     kappa=0.95,  # low-pass filter of the eligibility trace
     kappa_reg=0.95,  # low-pass filter of the firing rate for regularization
     surrogate_gradient_function="piecewise_linear",
+    surrogate_gradient_height=0.5,
+    surrogate_gradient_width=0.59,
     t_ref=5.0,
     tau_m=20.0,
     V_m=0.0,
