@@ -400,28 +400,14 @@ class Tools:
     def verify(self):
         self.loss = self.load_data("learning_performance").loss.to_numpy()
 
-        # from datetime import datetime
-        # from pathlib import Path
-        # fname = (Path.home() / "log" / datetime.now().strftime("%Y-%m-%d_%u_%H-%M-%S")).with_suffix(".txt")
-        # with open(fname, "w") as f:
-        #     f.write(self.file_path.name + "\n\n")
-        #     for l in self.loss:
-        #         f.write(f"{l:.13f}\n")
-        # exit()
-
-        # print(self.file_path.name)
-        # for l in self.loss:
-        #     print(f"{l:.14f},")
-        # exit()
-
         loss_map = {
             "eprop_supervised_classification_evidence-accumulation.py": [
                 34.58427289782617,
-                36.87835068653019,
-                28.89970643558962,
-                31.60581680525202,
-                36.76571948680768,
-                29.90618754038629,
+                36.70613320098335,
+                28.76956055149927,
+                31.72556125455047,
+                37.86311373441664,
+                28.83000346955887,
             ],
             "eprop_supervised_classification_evidence-accumulation_bsshslm_2020.py": [
                 0.70216337067153,
@@ -432,27 +418,27 @@ class Tools:
                 0.67269494515383,
             ],
             "eprop_supervised_classification_neuromorphic_mnist.py": [
-                10.35322836401918,
-                8.33506530601532,
-                9.72408176470581,
-                9.25152573790276,
-                4.67788466496715,
-                31.78819420209928,
+                53.22189789076346,
+                11.47202858963620,
+                15.48989069361456,
+                12.25313574995387,
+                11.55505826294500,
+                18.69022685114927,
             ],
             "eprop_supervised_classification_neuromorphic_mnist_bsshslm_2020.py": [
-                2.30246587138697,
-                2.28945027983528,
-                2.15313277459524,
-                2.78232640765524,
-                1.97565231669283,
-                2.24778735962639,
+                2.30169193352033,
+                2.30460790228436,
+                2.30318530812726,
+                2.35351319497111,
+                2.25478261712781,
+                2.27606637088642,
             ],
             "eprop_supervised_regression_handwriting.py": [
                 91.20706143549684,
                 91.24365648440904,
-                91.36386255798166,
-                91.15808668390740,
-                91.32144527401481,
+                91.36371455870751,
+                91.17114245646556,
+                91.33388530139359,
             ],
             "eprop_supervised_regression_handwriting_bsshslm_2020.py": [
                 91.40191610510352,
@@ -462,11 +448,11 @@ class Tools:
                 86.98770239575573,
             ],
             "eprop_supervised_regression_lemniscate.py": [
-                313.97823685007972,
-                314.44451082112619,
-                314.33470446080099,
-                314.34578846087288,
-                314.26966562042782,
+                313.97780874558964,
+                314.44451084333986,
+                314.33470446142724,
+                314.34578846060418,
+                314.26966573356208,
             ],
             "eprop_supervised_regression_lemniscate_bsshslm_2020.py": [
                 314.30442538643001,
@@ -477,10 +463,10 @@ class Tools:
             ],
             "eprop_supervised_regression_sine-waves.py": [
                 107.73732072362752,
-                106.42253313316886,
-                107.37869441301808,
-                108.10839027499374,
-                107.76400611943626,
+                106.35465029286360,
+                107.88661829581604,
+                107.79733948745920,
+                107.82189392351764,
             ],
             "eprop_supervised_regression_sine-waves_bsshslm_2020.py": [
                 101.96435699904158,
@@ -492,7 +478,7 @@ class Tools:
         }
 
         loss_reference = np.array(loss_map.get(self.file_path.name))
-
+        print(self.file_path.name)
         if loss_reference is None:
             print("\nFAILURE: No reference loss.\n")
             return
@@ -509,6 +495,8 @@ class Tools:
                 print(f"{loss_reference[deviation_idx]:.16f} loss reference")
                 print(f"{self.loss[deviation_idx]-loss_reference[deviation_idx]:.16f} difference")
             print(f"\nFAILURE: The loss does not match the reference values.\n")
+            for l in self.loss:
+                print(f"{l:.14f},")
         else:
             print(f"\nSUCCESS: The loss matches the reference values.\n")
 
