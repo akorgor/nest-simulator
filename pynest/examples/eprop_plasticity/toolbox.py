@@ -225,11 +225,7 @@ class Tools:
 
         del data, conns
 
-    def save_recordings(self, recorder_label, duration):
-
-        time_margin = 50.0
-        duration_sequence = duration["sequence"]
-        duration_task = duration["task"]
+    def save_recordings(self, recorder_label):
 
         field_rename_map = dict(
             senders="sender",
@@ -242,12 +238,11 @@ class Tools:
         )
 
         file_path_main = self.path_recordings_dir / f"{recorder_label}.csv"
-        file_path_sub = self.path_recordings_dir / f"{recorder_label}_subset.csv"
-        self.data_file_list.append(file_path_sub.stem)
+        self.data_file_list.append(file_path_main.stem)
 
-        writer_main, writer_sub = None, None
-        file_main, file_sub = None, None
-        fieldnames_main, fieldnames_sub = None, None
+        writer_main = None
+        file_main = None
+        fieldnames_main = None
 
         flush_every = 10000
         row_counter = 0
@@ -257,7 +252,7 @@ class Tools:
                 if not (file_path_input.name.endswith(".dat") or file_path_input.name.endswith(".csv")):
                     continue
 
-                if file_path_input in {file_path_main, file_path_sub}:
+                if file_path_input == file_path_main:
                     continue
 
                 with open(file_path_input, newline="") as file_input:
@@ -287,12 +282,6 @@ class Tools:
                         writer_main.writeheader()
                         fieldnames_main = fieldnames_output
 
-                    if writer_sub is None:
-                        file_sub = open(file_path_sub, "w", newline="")
-                        writer_sub = csv.DictWriter(file_sub, fieldnames=fieldnames_output, extrasaction="ignore")
-                        writer_sub.writeheader()
-                        fieldnames_sub = fieldnames_output
-
                     for row in reader:
                         row_renamed = {field_rename_map.get(k, k): v for k, v in row.items()}
 
@@ -303,45 +292,27 @@ class Tools:
 
                         writer_main.writerow(row_main_output)
 
-                        time_value = row_renamed.get("time", "")
-                        try:
-                            time_value = float(time_value) if time_value not in ("", None) else None
-                        except ValueError:
-                            time_value = None
-
-                        if time_value is not None and (
-                            (time_value < duration_sequence + time_margin)
-                            or (time_value >= duration_task - duration_sequence - time_margin)
-                        ):
-                            if fieldnames_output != fieldnames_sub:
-                                row_sub_output = {k: row_renamed.get(k, "") for k in fieldnames_sub}
-                            else:
-                                row_sub_output = row_renamed
-                            writer_sub.writerow(row_sub_output)
-
                         row_counter += 1
                         if row_counter % flush_every == 0:
-                            for file_handle in [file_main, file_sub]:
-                                if file_handle is not None:
-                                    file_handle.flush()
+                            if file_main is not None:
+                                file_main.flush()
 
                 file_path_input.unlink()
 
         finally:
-            for file_handle in [file_main, file_sub]:
-                if file_handle is not None:
-                    file_handle.flush()
-                    file_handle.close()
+            if file_main is not None:
+                file_main.flush()
+                file_main.close()
 
     def get_events(self, prefix="", save=False):
-        files = sorted(self.path_recordings_dir.glob(f"{prefix}*multimeter_out*.dat"))
+        files = sorted(self.path_recordings_dir.glob(f"{prefix}*multimeter_learning*.dat"))
         if not files:
             empty_i = np.empty(0, dtype=np.int64)
             empty_f = np.empty(0, dtype=np.float64)
             return empty_i, empty_f, empty_f
 
         senders, times, readout_signals, target_signals = [], [], [], []
-        out_path = self.path_recordings_dir / f"{prefix}_multimeter_out.csv"
+        out_path = self.path_recordings_dir / f"{prefix}_multimeter_learning.csv"
 
         if save and out_path.exists():
             out_path.unlink()
@@ -381,7 +352,7 @@ class Tools:
         return senders[order], readout_signals[order], target_signals[order]
 
     def clear_events(self, prefix):
-        for path in sorted(self.path_recordings_dir.glob(f"{prefix}*multimeter_out*.dat")):
+        for path in sorted(self.path_recordings_dir.glob(f"{prefix}*multimeter_learning*.dat")):
             path.unlink()
 
     def _make_serializable(self, obj):

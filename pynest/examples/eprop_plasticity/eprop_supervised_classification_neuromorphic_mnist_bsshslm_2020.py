@@ -310,58 +310,71 @@ n_record_w = 5  # number of senders and targets to record weights from - this sc
 if n_record == 0 or n_record_w == 0:
     raise ValueError("n_record and n_record_w >= 1 required")
 
-params_mm_rec = dict(
-    interval=duration["step"],  # interval between two recorded time points
-    record_from=["V_m", "surrogate_gradient", "learning_signal"],  # dynamic variables to record
-    start=duration["offset_gen"] + duration["delay_inp_rec"],  # start time of recording
-    label="multimeter_rec",
-    record_to="ascii",
+params_mm_learning = dict(
+    interval=duration["step"],
+    label="multimeter_learning",
     precision=16,
+    record_from=["readout_signal", "target_signal"],
+    record_to="ascii",
+    start=duration["total_offset"],
 )
 
 params_mm_out = dict(
     interval=duration["step"],
-    record_from=["readout_signal", "target_signal"],
-    start=duration["total_offset"],
     label="multimeter_out",
-    record_to="ascii",
     precision=16,
+    record_from=["readout_signal", "target_signal", "V_m", "readout_signal_unnorm", "error_signal"],
+    record_to="ascii",
+    start=0.0,
+    stop=duration["sequence"],
 )
 
-params_wr = dict(
-    start=duration["total_offset"],
-    label="weight_recorder",
-    record_to="ascii",
+params_mm_rec = dict(
+    interval=duration["step"],  # interval between two recorded time points
+    label="multimeter_rec",
     precision=16,
+    record_from=["V_m", "surrogate_gradient", "learning_signal"],  # dynamic variables to record
+    record_to="ascii",
+    start=0.0,
+    stop=duration["sequence"],
 )
 
 params_sr_in = dict(
-    start=duration["offset_gen"],
     label="spike_recorder_in",
-    record_to="ascii",
     precision=16,
+    record_to="ascii",
+    start=0.0,
+    stop=duration["sequence"],
 )
 
 params_sr_rec = dict(
-    start=duration["offset_gen"],
     label="spike_recorder_rec",
-    record_to="ascii",
     precision=16,
+    record_to="ascii",
+    start=0.0,
+    stop=duration["sequence"],
+)
+
+params_wr = dict(
+    label="weight_recorder",
+    precision=16,
+    record_to="ascii",
+    start=duration["total_offset"],
 )
 
 ####################
 
-if cfg["record_dynamics"]:
-    params_mm_out["record_from"] += ["V_m", "readout_signal_unnorm", "error_signal"]
+mm_learning = nest.Create("multimeter", params_mm_learning)
 
+if cfg["record_dynamics"]:
+    mm_out = nest.Create("multimeter", params_mm_out)
     mm_rec = nest.Create("multimeter", params_mm_rec)
     sr_in = nest.Create("spike_recorder", params_sr_in)
     sr_rec = nest.Create("spike_recorder", params_sr_rec)
+    dynamics_recorders = [mm_out, mm_rec, sr_in, sr_rec]
 
 if cfg["record_weights"]:
     wr = nest.Create("weight_recorder", params_wr)
-
-mm_out = nest.Create("multimeter", params_mm_out)
 
 nrns_rec_record = nrns_rec[:n_record]
 
@@ -468,12 +481,13 @@ nest.Connect(nrns_out, nrns_rec, params_conn_all_to_all, params_syn_feedback)  #
 nest.Connect(gen_rate_target, nrns_out, params_conn_one_to_one, params_syn_rate_target)  # connection 6
 nest.Connect(nrns_out, nrns_out, params_conn_all_to_all, params_syn_out_out)  # connection 7
 nest.Connect(gen_spk_final_update, nrns_inp + nrns_rec, "all_to_all", dict(weight=1000.0))
-nest.Connect(mm_out, nrns_out, params_conn_all_to_all, params_syn_static)
+nest.Connect(mm_learning, nrns_out, params_conn_all_to_all, params_syn_static)
 
 if cfg["record_dynamics"]:
+    nest.Connect(mm_out, nrns_out, params_conn_all_to_all, params_syn_static)
+    nest.Connect(mm_rec, nrns_rec_record, params_conn_all_to_all, params_syn_static)
     nest.Connect(nrns_inp, sr_in, params_conn_all_to_all, params_syn_static)
     nest.Connect(nrns_rec, sr_rec, params_conn_all_to_all, params_syn_static)
-    nest.Connect(mm_rec, nrns_rec_record, params_conn_all_to_all, params_syn_static)
 
 if cfg["record_weights"]:
     tools.configure_weight_recorder_connections(wr, nrns_inp, nrns_rec, nrns_out, n_record_w)
@@ -767,6 +781,9 @@ class TrainingPipeline:
             for self.k_iter in range(0, n_iter_train, n_iter_train_chunk):
                 self.run_phase("training", eta_train, n_iter_train_chunk, True)
 
+        if cfg["record_dynamics"]:
+            for recorder in dynamics_recorders:
+                recorder.set(start=nest.biological_time, stop=nest.biological_time + duration["sequence"])
         self.run_phase("test", eta_test, n_iter_test, True)
 
         self.process()
@@ -817,7 +834,6 @@ tools.save_node_ids(
         "gen_spk_final_update": gen_spk_final_update,
     }
 )
-tools.save_recordings("multimeter_out", duration)
 
 # %% ###########################################################################################################
 # Save recordings
@@ -825,12 +841,13 @@ tools.save_recordings("multimeter_out", duration)
 # We can also retrieve the recorded history of the dynamic variables and weights, as well as detected spikes.
 
 if cfg["record_dynamics"]:
-    tools.save_recordings("multimeter_rec", duration)
-    tools.save_recordings("spike_recorder_in", duration)
-    tools.save_recordings("spike_recorder_rec", duration)
+    tools.save_recordings("multimeter_out")
+    tools.save_recordings("multimeter_rec")
+    tools.save_recordings("spike_recorder_in")
+    tools.save_recordings("spike_recorder_rec")
 
 if cfg["record_weights"]:
-    tools.save_recordings("weight_recorder", duration)
+    tools.save_recordings("weight_recorder")
 
 # %% ###########################################################################################################
 # Save post-training weights

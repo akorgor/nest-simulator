@@ -65,37 +65,28 @@ class Plotter:
                 ]
             )
         )
+        self.compute_split_idx()
 
     def plot_pattern(self):
         """
         Visualize the generated pattern alongside the target pattern for comparison. The two readout neurons encode the horizontal and vertical coordinates of the pattern, respectively.
         """
 
-        idc = (self.data["multimeter_out_subset"].time >= self.duration_task - self.duration_sequence) & (
-            self.data["multimeter_out_subset"].time < self.duration_task
-        )
+        df = self.data["multimeter_out"]
 
-        order = np.argsort(self.data["multimeter_out_subset"].sender[idc].to_numpy(), kind="stable")
-
-        readout_signal = (
-            self.data["multimeter_out_subset"]
-            .readout_signal[idc]
-            .to_numpy()[order]
-            .reshape(self.n_out, 1, self.batch_size, self.steps_sequence)
-        )
-        target_signal = (
-            self.data["multimeter_out_subset"]
-            .target_signal[idc]
-            .to_numpy()[order]
-            .reshape(self.n_out, 1, self.batch_size, self.steps_sequence)
-        )
+        xlims = self.split_dict["After"]
+        idc = (df.time >= xlims[0]) & (df.time < xlims[1])
+        senders = np.unique(df.sender)
+        t0 = df.target_signal[(df.sender == senders[0]) & idc].to_numpy()
+        t1 = df.target_signal[(df.sender == senders[1]) & idc].to_numpy()
+        
+        r0 = df.readout_signal[(df.sender == senders[0]) & idc].to_numpy()
+        r1 = df.readout_signal[(df.sender == senders[1]) & idc].to_numpy()
 
         fig, ax = plt.subplots()
 
-        ax.plot(target_signal[0, 0, 0], -target_signal[1, 0, 0], c=self.colors["blue"], label="Target signal")
-        ax.plot(
-            readout_signal[0, 0, 0], -readout_signal[1, 0, 0], c=self.colors["red"], ls="--", label="Readout signal"
-        )
+        ax.plot(t0, -t1, c=self.colors["blue"], label="Target signal")
+        ax.plot(r0, -r1, c=self.colors["red"], ls="--", label="Readout signal")
 
         ax.legend(bbox_to_anchor=(1.05, 0.5), loc="center left")
         ax.set_xlabel("Signal 0")
@@ -195,14 +186,14 @@ class Plotter:
         """
 
         candidates = [
-            "spike_recorder_in_subset",
-            "spike_recorder_rec_subset",
-            "multimeter_rec_subset",
-            "spike_recorder_reg_subset",
-            "multimeter_reg_subset",
-            "spike_recorder_ad_subset",
-            "multimeter_ad_subset",
-            "multimeter_out_subset",
+            "spike_recorder_in",
+            "spike_recorder_rec",
+            "multimeter_rec",
+            "spike_recorder_reg",
+            "multimeter_reg",
+            "spike_recorder_ad",
+            "multimeter_ad",
+            "multimeter_out",
         ]
 
         column_ylabels_list = [
@@ -233,16 +224,16 @@ class Plotter:
         idc_times = (df.time >= xlims[0]) & (df.time < xlims[1])
 
         if recordable == "spikes":
-            senders_subset = df.sender[idc_times]
-            times_subset = df.time[idc_times]
+            senders = df.sender[idc_times]
+            times = df.time[idc_times]
 
-            ax.scatter(times_subset, senders_subset, s=0.1, marker=".")
+            ax.scatter(times, senders, s=0.1, marker=".")
 
-            right_ylabel = f"Neurons\n{senders_subset.min()}-{senders_subset.max()}"
+            right_ylabel = f"Neurons\n{senders.min()}-{senders.max()}"
 
-            if len(senders_subset) > 0:
-                y_min = np.min(senders_subset)
-                y_max = np.max(senders_subset)
+            if len(senders) > 0:
+                y_min = np.min(senders)
+                y_max = np.max(senders)
                 margin = np.abs(y_max - y_min) * 0.1
                 if margin == 0:
                     margin = 1
@@ -263,6 +254,7 @@ class Plotter:
                 margin = 1
             ax.set_ylim(y_min - margin, y_max + margin)
 
+        ax.set_xlim(xlims)
         ax.set_ylabel(ylabel)
         ax.text(
             1.02,
@@ -276,6 +268,17 @@ class Plotter:
             color=self.colors["gray"],
         )
 
+    def compute_split_idx(self):
+        df_mm = self.data["multimeter_out"]
+
+        time_arr = df_mm[df_mm.sender == df_mm.sender.unique()[0]].time.to_numpy()
+        split_idx = np.where(np.diff(time_arr) != 1.0)[0][0]
+
+        self.split_dict = dict(
+            Before=[np.min(time_arr), np.min(time_arr) + self.duration_sequence],
+            After=[time_arr[split_idx+1], time_arr[split_idx+1] + self.duration_sequence]
+        )
+
     def plot_recordables(self):
         """
         Plot the time courses of the selected dynamic variables and spikes in two time windows: one at the beginning of training and one at the end.
@@ -283,11 +286,8 @@ class Plotter:
 
         recordables_list = self.build_recordables_list()
 
-        subset = dict(
-            Before=(1, self.duration_sequence), After=(self.duration_task - self.duration_sequence, self.duration_task)
-        )
         n_subplots = len(recordables_list)
-        for title, xlims in subset.items():
+        for title, xlims in self.split_dict.items():
             fig, axs = plt.subplots(
                 n_subplots,
                 1,
@@ -301,7 +301,6 @@ class Plotter:
                 self.plot_recordable(ax, xlims, *recordable)
 
             axs[-1].set_xlabel("Time (ms)")
-            axs[-1].set_xlim(*xlims)
 
             fig.align_ylabels()
             fig.savefig(self.path_figures_dir / f"fig_recordables_{title.lower()}-training.pdf")
@@ -312,13 +311,13 @@ class Plotter:
         """
 
         id_to_label = self.data["node_ids"].set_index("id")["label"].str.split("_").str[1]
-        self.data["weight_recorder_subset"]["label"] = (
-            self.data["weight_recorder_subset"]["sender"].map(id_to_label)
+        self.data["weight_recorder"]["label"] = (
+            self.data["weight_recorder"]["sender"].map(id_to_label)
             + "_"
-            + self.data["weight_recorder_subset"]["receiver"].map(id_to_label)
+            + self.data["weight_recorder"]["receiver"].map(id_to_label)
         )
 
-        weight_matrix_labels = self.data["weight_recorder_subset"].label.unique()
+        weight_matrix_labels = self.data["weight_recorder"].label.unique()
 
         fig, axs = plt.subplots(len(weight_matrix_labels), 1, sharex=True, sharey=True, figsize=(5, 5))
 
@@ -331,7 +330,7 @@ class Plotter:
             ]
         ):
 
-            group = self.data["weight_recorder_subset"][self.data["weight_recorder_subset"].label == label]
+            group = self.data["weight_recorder"][self.data["weight_recorder"].label == label]
             for sender in np.unique(group.sender):
                 for receiver in np.unique(group.receiver):
                     df_sub = group[(group.sender == sender) & (group.receiver == receiver)].sort_values(by=["time"])
