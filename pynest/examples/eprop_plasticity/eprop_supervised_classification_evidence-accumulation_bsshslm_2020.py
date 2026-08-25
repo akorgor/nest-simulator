@@ -561,7 +561,7 @@ tools.constrain_weights(nrns_rec, nrns_rec, params_syn_rec, "rec")
 tools.constrain_weights(nrns_rec, nrns_out, params_syn_out, "out")
 
 if cfg["perturbation"]:
-    sg_perturb = nest.Create("spike_generator", dict(spike_times=[duration["sequence"]*batch_size*2]))
+    sg_perturb = nest.Create("spike_generator", dict(spike_times=[duration["sequence"]*batch_size*2  + duration["cues"] + duration["bg_noise"] + 20.0]))
     conns_dict = nest.GetConnections(nrns_rec[0], nrns_rec+nrns_out).get(["target", "weight"])
     conn_target = np.array(conns_dict["target"])
     conn_weight= np.array(conns_dict["weight"])
