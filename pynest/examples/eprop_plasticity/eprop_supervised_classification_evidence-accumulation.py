@@ -103,6 +103,7 @@ cfg = dict(
     n_iter_train_chunk=5,
     n_iter_validate_every=10,
     record_dynamics=True,
+    record_n_seq=1,
     record_weights=True,
     relative_path_figures_dir="figures",
     relative_path_recordings_dir="recordings",
@@ -333,7 +334,7 @@ params_mm_out = dict(
     record_from=["readout_signal", "target_signal", "V_m", "error_signal"],
     record_to="ascii",
     start=0.0,
-    stop=duration["sequence"]
+    stop=cfg["record_n_seq"]*duration["sequence"]
 )
 
 params_mm_reg = dict(
@@ -343,7 +344,7 @@ params_mm_reg = dict(
     record_from=["V_m", "surrogate_gradient", "learning_signal"],
     record_to="ascii",
     start=0.0,
-    stop=duration["sequence"],
+    stop=cfg["record_n_seq"]*duration["sequence"],
 )
 
 params_mm_ad = dict(
@@ -353,7 +354,7 @@ params_mm_ad = dict(
     record_from=params_mm_reg["record_from"] + ["V_th_adapt", "adaptation"],
     record_to="ascii",
     start=0.0,
-    stop=duration["sequence"],
+    stop=cfg["record_n_seq"]*duration["sequence"],
 )
 
 params_sr_in = dict(
@@ -361,7 +362,7 @@ params_sr_in = dict(
     precision=16,
     record_to="ascii",
     start=0.0,
-    stop=duration["sequence"],
+    stop=cfg["record_n_seq"]*duration["sequence"],
 )
 
 params_sr_reg = dict(
@@ -369,7 +370,7 @@ params_sr_reg = dict(
     precision=16,
     record_to="ascii",
     start=0.0,
-    stop=duration["sequence"],
+    stop=cfg["record_n_seq"]*duration["sequence"],
 )
 
 params_sr_ad = dict(
@@ -377,7 +378,7 @@ params_sr_ad = dict(
     precision=16,
     record_to="ascii",
     start=0.0,
-    stop=duration["sequence"],
+    stop=cfg["record_n_seq"]*duration["sequence"],
 )
 
 params_wr = dict(

@@ -108,6 +108,7 @@ cfg = dict(
     perturbation=False,
     record_dynamics=True,
     record_weights=True,
+    record_n_seq=1,
     relative_path_figures_dir="figures",
     relative_path_recordings_dir="recordings",
     reset_neurons=True,
@@ -345,7 +346,7 @@ params_mm_out = dict(
     record_from=["readout_signal", "target_signal", "V_m", "readout_signal_unnorm", "error_signal"],
     record_to="ascii",
     start=0.0,
-    stop=duration["sequence"],
+    stop=cfg["record_n_seq"]*duration["sequence"],
 )
 
 params_mm_reg = dict(
@@ -355,7 +356,7 @@ params_mm_reg = dict(
     record_from=["V_m", "surrogate_gradient", "learning_signal"],  # dynamic variables to record
     record_to="ascii",
     start=0.0,  # start time of recording
-    stop=duration["sequence"],  # stop time of recording
+    stop=cfg["record_n_seq"]*duration["sequence"],  # stop time of recording
 )
 
 params_mm_ad = dict(
@@ -365,7 +366,7 @@ params_mm_ad = dict(
     record_from=params_mm_reg["record_from"] + ["V_th_adapt", "adaptation"],
     record_to="ascii",
     start=0.0,  # start time of recording
-    stop=duration["sequence"],  # stop time of recording
+    stop=cfg["record_n_seq"]*duration["sequence"],  # stop time of recording
 )
 
 params_sr_in = dict(
@@ -373,7 +374,7 @@ params_sr_in = dict(
     precision=16,
     record_to="ascii",
     start=0.0,
-    stop=duration["sequence"],
+    stop=cfg["record_n_seq"]*duration["sequence"],
 )
 
 params_sr_reg = dict(
@@ -381,7 +382,7 @@ params_sr_reg = dict(
     precision=16,
     record_to="ascii",
     start=0.0,
-    stop=duration["sequence"],
+    stop=cfg["record_n_seq"]*duration["sequence"],
 )
 
 params_sr_ad = dict(
@@ -389,7 +390,7 @@ params_sr_ad = dict(
     precision=16,
     record_to="ascii",
     start=0.0,
-    stop=duration["sequence"],
+    stop=cfg["record_n_seq"]*duration["sequence"],
 )
 
 params_wr = dict(
@@ -397,7 +398,7 @@ params_wr = dict(
     precision=16,
     record_to="ascii",
     start=0.0,
-    stop=duration["sequence"],
+    stop=cfg["record_n_seq"]*duration["sequence"],
 )
 
 ####################

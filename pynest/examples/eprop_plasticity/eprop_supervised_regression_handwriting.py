@@ -107,6 +107,7 @@ cfg = dict(
     job_ntasks_per_node=1,
     n_iter_train=5,
     record_dynamics=True,
+    record_n_seq=1,
     record_weights=True,
     relative_path_data_dir="data",
     relative_path_figures_dir="figures",
@@ -299,7 +300,7 @@ params_mm_out = dict(
     record_from=["readout_signal", "target_signal", "V_m", "error_signal"],
     record_to="ascii",
     start=0.0,
-    stop=duration["sequence"],
+    stop=cfg["record_n_seq"]*duration["sequence"],
 )
 
 params_mm_rec = dict(
@@ -309,7 +310,7 @@ params_mm_rec = dict(
     record_from=[ "V_m", "surrogate_gradient", "learning_signal", "V_th_adapt", "adaptation"],  # dynamic variables to record
     record_to="ascii",
     start=0.0,
-    stop=duration["sequence"],
+    stop=cfg["record_n_seq"]*duration["sequence"],
 )
 
 params_sr_in = dict(
@@ -317,7 +318,7 @@ params_sr_in = dict(
     precision=16,
     record_to="ascii",
     start=0.0,
-    stop=duration["sequence"],
+    stop=cfg["record_n_seq"]*duration["sequence"],
 )
 
 params_sr_rec = dict(
@@ -325,7 +326,7 @@ params_sr_rec = dict(
     precision=16,
     record_to="ascii",
     start=0.0,
-    stop=duration["sequence"],
+    stop=cfg["record_n_seq"]*duration["sequence"],
 )
 
 params_wr = dict(
