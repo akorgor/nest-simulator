@@ -312,10 +312,7 @@ class Tools:
             return empty_i, empty_f, empty_f
 
         senders, times, readout_signals, target_signals = [], [], [], []
-        out_path = self.path_recordings_dir / f"{prefix}_multimeter_learning.csv"
-
-        if save and out_path.exists():
-            out_path.unlink()
+        out_path = self.path_recordings_dir / "multimeter_learning.csv"
 
         for fname in files:
             with open(fname, newline="") as f:

@@ -588,7 +588,7 @@ if comm.rank != 0:
 # We evaluate the network's training error by calculating a loss - in this case, the mean squared error between
 # the integrated recurrent network activity and the target rate.
 
-senders, readout_signal, target_signal = tools.get_events()
+senders, readout_signal, target_signal = tools.get_events(save=True)
 
 readout_signal = readout_signal.reshape((n_out, n_iter_train, batch_size, steps["sequence"]))
 target_signal = target_signal.reshape((n_out, n_iter_train, batch_size, steps["sequence"]))
