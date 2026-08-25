@@ -809,9 +809,11 @@ class TrainingPipeline:
 
         gen_spk_final_update.set(dict(spike_times=[duration["sim"] + 1.0]))
 
-        self.simulate(duration["final_update"])
+        self.simulate(duration["final_update"], "final_update_0_")
         duration["sim"] += duration["final_update"]
 
+        if comm.rank == 0:
+            tools.clear_events("final_update_")
 
 training_pipeline = TrainingPipeline()
 training_pipeline.run()
