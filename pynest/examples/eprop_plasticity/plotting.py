@@ -1,6 +1,4 @@
-from collections import OrderedDict as odict
-from pathlib import Path
-
+import pathlib
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
@@ -22,7 +20,7 @@ class Plotter:
         record_dynamics,
         include_plot_pattern,
     ):
-        self.path_figures_dir = (Path(file_path).parent / relative_path_figures_dir).resolve()
+        self.path_figures_dir = (pathlib.Path(file_path).parent / relative_path_figures_dir).resolve()
         self.path_figures_dir.mkdir(parents=True, exist_ok=True)
         self.data = data
         self.duration_task = duration_task
@@ -34,7 +32,7 @@ class Plotter:
         self.record_dynamics = record_dynamics
         self.include_plot_pattern = include_plot_pattern
 
-        self.colors = odict(
+        self.colors = dict(
             blue="#2854c5",
             red="#e04b40",
             green="#25aa2c",

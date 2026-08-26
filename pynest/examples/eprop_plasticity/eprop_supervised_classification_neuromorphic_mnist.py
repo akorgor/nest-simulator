@@ -77,7 +77,7 @@ References
 # We begin by importing all libraries required for the simulation, analysis, and visualization.
 
 import zipfile
-from pathlib import Path
+import pathlib
 
 import nest
 import numpy as np
@@ -530,7 +530,7 @@ def download_and_extract_nmnist_dataset(save_path):
         zip="dataset.zip",
     )
 
-    save_path = Path(save_path)
+    save_path = pathlib.Path(save_path)
     path = save_path / nmnist_dataset["directory"]
 
     train_path = path / "Train"
@@ -595,7 +595,7 @@ def load_image(file_path, pixels_dict):
 
 class DataLoader:
     def __init__(self, path, selected_labels, batch_size, pixels_dict):
-        self.path = Path(path)
+        self.path = pathlib.Path(path)
         self.selected_labels = selected_labels
         self.batch_size = batch_size
         self.pixels_dict = pixels_dict

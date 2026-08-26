@@ -2,8 +2,7 @@ import csv
 import json
 import math
 from collections.abc import Mapping
-from pathlib import Path
-
+import pathlib
 import nest
 import numpy as np
 import pandas as pd
@@ -12,7 +11,7 @@ from IPython.display import Image
 
 class Tools:
     def __init__(self, cfg, file_path):
-        self.file_path = Path(file_path)
+        self.file_path = pathlib.Path(file_path)
         self.cfg = cfg
         self._load_cfg()
         self._initialize_save_dirs()

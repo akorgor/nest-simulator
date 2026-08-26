@@ -1,5 +1,5 @@
 import json
-from pathlib import Path
+import pathlib
 
 import nest
 from mpi4py import MPI
@@ -10,7 +10,7 @@ memory_log = []
 def log_memory(label):
     memory_log.append((nest.Rank(), label, nest.memory_size))
 
-file_path = Path(__file__)
+file_path = pathlib.Path(__file__)
 
 with open(file_path.parent / "config.json", "r") as f:
     cfg = json.load(f)
