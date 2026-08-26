@@ -85,7 +85,7 @@ nest.set(
 duration = cfg["steps"] * nest.resolution
 offset = 2 * nest.resolution
 
-# Create nodes =========================================================================================================
+# ==== Create nodes ====
 log_memory("after_set")
 
 nrns_rec = nest.Create(model_nrn_rec, n_rec)
@@ -114,7 +114,7 @@ if n_in > 0:
 if model_gen_rate is not None:
     gen_rate_target = nest.Create(model_gen_rate, n_out)
 
-# Configure nodes ======================================================================================================
+# ==== Configure nodes ====
 
 if cfg["plasticity"] != "regular":
     ignore_and_spike_interval = 1000.0 / cfg["rate_rec"]  # ms
@@ -137,7 +137,7 @@ if cfg["plasticity"] != "regular":
 if model_nrn_out == "iaf_psc_delta":
     nrns_out.set(dict(V_th=1e100))
 
-# Connect nodes ========================================================================================================
+# ==== Connect nodes ====
 log_memory("after_configure")
 
 if n_in > 0:
@@ -193,7 +193,7 @@ if nest.Rank() == 0:
     with open(path_recordings_dir / "object_counts.json", "w") as f:
         json.dump({"connections": all_n_conns, "nodes": n_nodes}, f)
 
-# Simulate =============================================================================================================
+# ==== Simulate ====
 log_memory("after_connect")
 nest.Prepare()
 log_memory("after_prepare")
@@ -202,7 +202,7 @@ log_memory("after_run")
 nest.Cleanup()
 log_memory("after_cleanup")
 
-# Evaluate =============================================================================================================
+# ==== Evaluate ====
 all_memory_logs = MPI.COMM_WORLD.gather(memory_log, root=0)
 
 if nest.Rank() == 0:
