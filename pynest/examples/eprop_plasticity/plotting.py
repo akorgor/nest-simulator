@@ -77,7 +77,7 @@ class Plotter:
         senders = np.unique(df.sender)
         t0 = df.target_signal[(df.sender == senders[0]) & idc].to_numpy()
         t1 = df.target_signal[(df.sender == senders[1]) & idc].to_numpy()
-        
+
         r0 = df.readout_signal[(df.sender == senders[0]) & idc].to_numpy()
         r1 = df.readout_signal[(df.sender == senders[1]) & idc].to_numpy()
 

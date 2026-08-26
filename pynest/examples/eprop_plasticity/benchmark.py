@@ -129,7 +129,7 @@ if cfg["plasticity"] != "regular":
 
     if cfg["plasticity"].startswith("eprop"):
         params["flush_event_send_interval"] = cfg["eprop_update_interval"]
-    
+
     if cfg["plasticity"] == "eprop_bio":
         params["eprop_isi_trace_cutoff"] = 100.0
     nrns_rec.set(params)
