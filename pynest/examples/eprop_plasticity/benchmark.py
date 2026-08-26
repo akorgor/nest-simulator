@@ -95,7 +95,8 @@ if n_in > 0:
     if cfg["input_generator"] == "poisson_generator":
         spk_gen = nest.Create("poisson_generator", 1, dict(rate=cfg["rate_in"], start=offset, stop=duration + offset))
         nrns_in = nest.Create("parrot_neuron", n_in)
-        nest.Connect(spk_gen, nrns_in, dict(rule="all_to_all"), dict(synapse_model="static_synapse"))
+        nest.CopyModel("static_synapse", "syn_spkgen_in")
+        nest.Connect(spk_gen, nrns_in, dict(rule="all_to_all"), dict(synapse_model="syn_spkgen_in"))
     elif cfg["input_generator"] in ["spike_generator", "spike_train_injector"]:
         nrns_in = nest.Create(cfg["input_generator"], n_in)
         local_nrns_in = nest.GetLocalNodeCollection(nrns_in)
@@ -140,16 +141,57 @@ if model_nrn_out == "iaf_psc_delta":
 log_memory("after_configure")
 
 if n_in > 0:
-    nest.Connect(nrns_in, nrns_rec, dict(rule="fixed_indegree", indegree=cfg["indegree_in"]), dict(synapse_model="static_synapse"))
+    nest.CopyModel("static_synapse", "syn_in_rec")
+    nest.Connect(nrns_in, nrns_rec, dict(rule="fixed_indegree", indegree=cfg["indegree_in"]), dict(synapse_model="syn_in_rec"))
 
-nest.Connect(nrns_rec, nrns_rec, dict(rule="fixed_indegree", indegree=cfg["indegree_rec"]), dict(synapse_model=model_syn_rec))
-nest.Connect(nrns_rec, nrns_out, dict(rule="fixed_indegree", indegree=cfg["indegree_out"]), dict(synapse_model="static_synapse"))
+nest.CopyModel(model_syn_rec, "syn_rec_rec")
+nest.Connect(nrns_rec, nrns_rec, dict(rule="fixed_indegree", indegree=cfg["indegree_rec"]), dict(synapse_model="syn_rec_rec"))
+
+nest.CopyModel("static_synapse", "syn_rec_out")
+nest.Connect(nrns_rec, nrns_out, dict(rule="fixed_indegree", indegree=cfg["indegree_out"]), dict(synapse_model="syn_rec_out"))
 
 if model_conn_fb is not None:
-    nest.Connect(nrns_out, nrns_rec, dict(rule="fixed_outdegree", outdegree=cfg["outdegree_fb"]), dict(synapse_model=model_conn_fb))
+    nest.CopyModel(model_conn_fb, "syn_out_rec")
+    nest.Connect(nrns_out, nrns_rec, dict(rule="fixed_outdegree", outdegree=cfg["outdegree_fb"]), dict(synapse_model="syn_out_rec"))
 
 if model_gen_rate is not None:
-    nest.Connect(gen_rate_target, nrns_out, dict(rule="one_to_one"), dict(synapse_model="rate_connection_delayed", receptor_type=2))
+    nest.CopyModel("rate_connection_delayed", "syn_rate_out")
+    nest.Connect(gen_rate_target, nrns_out, dict(rule="one_to_one"), dict(synapse_model="syn_rate_out", receptor_type=2))
+
+syn_model_keys = [
+    ("syn_spkgen_in", "static_synapse", n_in > 0 and cfg["input_generator"] == "poisson_generator"),
+    ("syn_in_rec", "static_synapse", n_in > 0),
+    ("syn_rec_rec", model_syn_rec, True),
+    ("syn_rec_out", "static_synapse", True),
+    ("syn_out_rec", model_conn_fb, model_conn_fb is not None),
+    ("syn_rate_out", "rate_connection_delayed", model_gen_rate is not None),
+]
+
+n_conns = {
+    key: {"synapse_model": model, "n": nest.GetDefaults(key)["num_connections"] if active else 0}
+    for key, model, active in syn_model_keys
+}
+assert sum(v["n"] for v in n_conns.values()) == nest.num_connections
+
+all_n_conns = {key: {**v, "n": MPI.COMM_WORLD.reduce(v["n"], op=MPI.SUM, root=0)} for key, v in n_conns.items()}
+all_n_conns["all"] = {"n": MPI.COMM_WORLD.reduce(nest.num_connections, op=MPI.SUM, root=0)}
+
+node_pop_keys = [
+    ("spk_gen", "poisson_generator", 1, n_in > 0 and cfg["input_generator"] == "poisson_generator"),
+    ("nrns_in", "parrot_neuron" if cfg["input_generator"] == "poisson_generator" else cfg["input_generator"], n_in, n_in > 0),
+    ("nrns_rec", model_nrn_rec, n_rec, True),
+    ("nrns_out", model_nrn_out, n_out, True),
+    ("gen_rate_target", model_gen_rate, n_out, model_gen_rate is not None),
+]
+
+n_nodes = {
+    key: {"neuron_model": model, "n": n if active else 0}
+    for key, model, n, active in node_pop_keys
+}
+
+if nest.Rank() == 0:
+    with open(path_recordings_dir / "object_counts.json", "w") as f:
+        json.dump({"connections": all_n_conns, "nodes": n_nodes}, f)
 
 # Simulate =============================================================================================================
 log_memory("after_connect")
