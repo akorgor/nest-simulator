@@ -79,7 +79,7 @@ repos:
           - pandas
           - pydocstyle
           - pydot
-        args: [--python-version=3.11]
+        args: [--python-version=3.12]
 
   - repo: https://github.com/PyCQA/pylint
     rev: v4.0.5
